@@ -1,0 +1,15 @@
+# AcidWurx mesh edge router — deployed by scripts/wave2_deployment/bootstrap.sh
+# (runtime token substitution: @@SUBNET_ROUTER_IP@@ / @@TARGET_APPLIANCE_MAC@@
+# are replaced from .env BEFORE wrangler deploy; deploy fails if unreplaced).
+# CLOUDFLARE_ACCOUNT_ID is read from the environment by wrangler.
+name = "acidwurx-mesh-router"
+main = "worker.js"
+compatibility_date = "2026-07-23"
+
+[vars]
+SUBNET_ROUTER_IP = "@@SUBNET_ROUTER_IP@@"
+TARGET_APPLIANCE_MAC = "@@TARGET_APPLIANCE_MAC@@"
+HEALTH_URL = "https://acidwurx.org"
+
+[[ai]]
+binding = "AI"

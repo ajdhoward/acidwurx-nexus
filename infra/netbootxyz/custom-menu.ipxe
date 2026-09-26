@@ -1,0 +1,44 @@
+#!ipxe
+# =============================================================================
+# AcidWurx NetBoot staging menu — served from markslone assets (port 8080).
+# Serves zero-touch reinstalls for the appliance + workstation profiles.
+# DietPi path = debian12-auto preseed followed by the DietPi installer task
+# (archive decision: DietPi is pure Debian 12; PXE installs the base).
+# =============================================================================
+set nexo_assets http://192.168.1.179:8080
+set deb12_base http://deb.debian.org/debian/dists/bookworm/main/installer-amd64/current/images/netboot/debian-installer/amd64
+set deb13_base http://deb.debian.org/debian/dists/trixie/main/installer-amd64/current/images/netboot/debian-installer/amd64
+
+menu AcidWurx NetBoot Staging (markslone PXE)
+item debian12-auto  Debian 12 Bookworm - automated appliance install (preseed)
+item debian13-net   Debian 13 Trixie - manual netinstall
+item popos          Pop!_OS via upstream netboot.xyz menu (TanyaCheex)
+item local          Boot from local disk
+item shell          iPXE diagnostic shell
+item reboot         Reboot
+choose --default debian12-auto --timeout 15000 target && goto ${target} || goto local
+
+:debian12-auto
+echo Booting Debian 12 automated appliance install...
+kernel ${deb12_base}/linux auto=true priority=critical preseed/url=${nexo_assets}/preseed.cfg locale=en_GB.UTF-8 keymap=gb hostname=jessicafletcher domain=lan interface=auto
+initrd ${deb12_base}/initrd.gz
+boot
+
+:debian13-net
+echo Booting Debian 13 netinstall (manual)...
+kernel ${deb13_base}/linux locale=en_GB.UTF-8 keymap=gb
+initrd ${deb13_base}/initrd.gz
+boot
+
+:popos
+chain http://boot.netboot.xyz/menu/index.html
+
+:local
+echo Booting from local disk...
+sanboot --no-describe --drive 0x80
+
+:shell
+shell
+
+:reboot
+reboot

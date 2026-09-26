@@ -1,0 +1,709 @@
+---
+# =============================================================================
+# AcidWurx Nexus — fleet playbook (idempotent, staged, zero-prompt)
+# Profiles: compute (jessicafletcher) | gateway (markslone) | legacy (barryslone)
+# Simulation: -e nexo_simulation=true (CI) skips reboot/download/mutation.
+# Check mode: ansible-playbook -i inventory.ini playbook.yml --check --diff
+# =============================================================================
+
+- name: "CI simulation stub (validates group_vars parse without hardware)"
+  hosts: ci-sim
+  gather_facts: false
+  tasks:
+    - name: "Assert fleet constants loaded"
+      ansible.builtin.assert:
+        that:
+          - nexo_lan_subnet == "192.168.1.0/24"
+          - nexo_isolcpus_range == "2-5"
+          - nexo_model_file == "qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+        quiet: true
+
+# -----------------------------------------------------------------------------
+- name: "Compute appliance profile — jessicafletcher (HP EliteDesk 800 G4 SFF)"
+  hosts: compute
+  become: true
+  gather_facts: true
+  vars:
+    nexo_mask_services:
+      - bluetooth
+      - avahi-daemon
+      - avahi-daemon.socket
+      - ModemManager
+      - cups
+      - cups-browsed
+      - cups.socket
+  handlers:
+    - name: "Reload systemd and restart ollama"
+      ansible.builtin.systemd_service:
+        name: ollama
+        state: restarted
+        daemon_reload: true
+
+  tasks:
+    - name: "Guard — Debian family only (Alpine/PXE variants use the netboot path)"
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "Debian"
+        fail_msg: >-
+          jessicafletcher must run a Debian-family OS for this profile
+          (observed baseline: Debian 13.6). Detected:
+          {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}.
+
+    - name: "Debloat — mask unnecessary daemons (headless appliance)"
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        masked: true
+        enabled: false
+        state: stopped
+      loop: "{{ nexo_mask_services }}"
+      failed_when: false
+
+    - name: "Debloat — purge avahi (mDNS discovery is dropped at the firewall anyway)"
+      ansible.builtin.apt:
+        name:
+          - avahi-daemon
+          - avahi-autoipd
+        state: absent
+        purge: true
+
+    - name: "Core runtime packages (rootless Podman + Mesa Vulkan ANV stack)"
+      ansible.builtin.apt:
+        name:
+          - podman
+          - slirp4netns
+          - fuse-overlayfs
+          - mesa-vulkan-drivers
+          - libvulkan1
+          - vulkan-tools
+          - nftables
+          - curl
+          - jq
+          - ca-certificates
+          - uidmap
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: "Optional VA-API media driver (video offload; not required for Vulkan inference)"
+      ansible.builtin.apt:
+        name: intel-media-va-driver
+        state: present
+      failed_when: false
+
+    - name: "Performance sysctls (hugepages 512, dirty ratios, network buffers)"
+      ansible.builtin.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_file: /etc/sysctl.d/99-nexo-performance.conf
+        reload: true
+      loop: "{{ nexo_sysctl_perf | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}={{ item.value }}"
+
+    - name: "CPU isolation — read current GRUB cmdline"
+      ansible.builtin.slurp:
+        src: /etc/default/grub
+      register: nexo_grub_raw
+
+    - name: "CPU isolation — fact for current defaults line"
+      ansible.builtin.set_fact:
+        nexo_grub_text: "{{ nexo_grub_raw.content | b64decode }}"
+
+    - name: "CPU isolation — inject isolcpus/nohz_full/rcu_nocbs into GRUB_CMDLINE_LINUX_DEFAULT"
+      ansible.builtin.replace:
+        path: /etc/default/grub
+        regexp: '^(GRUB_CMDLINE_LINUX_DEFAULT=")((?:(?!isolcpus=)[^"])*)(")$'
+        replace: >-
+          \1\2 isolcpus={{ nexo_isolcpus_range }}
+          nohz_full={{ nexo_isolcpus_range }}
+          rcu_nocbs={{ nexo_isolcpus_range }}\3
+      register: nexo_grub_changed
+
+    - name: "CPU isolation — apply GRUB configuration"
+      ansible.builtin.command: update-grub
+      when:
+        - nexo_grub_changed is changed
+        - not nexo_simulation
+        - not ansible_check_mode
+
+    - name: "CPU isolation — reboot into isolated-core kernel (skipped in simulation/check)"
+      ansible.builtin.reboot:
+        reboot_timeout: 180
+        msg: "AcidWurx Nexus: applying isolcpus={{ nexo_isolcpus_range }}"
+      when:
+        - nexo_grub_changed is changed
+        - not nexo_simulation
+        - not ansible_check_mode
+
+    - name: "Vulkan verification — enumerate ANV devices (UHD 630 must be index 0)"
+      ansible.builtin.command: vulkaninfo --summary
+      register: nexo_vulkaninfo
+      changed_when: false
+      when:
+        - not ansible_check_mode
+        - not nexo_simulation
+
+    - name: "Vulkan verification — assert UHD 630 present"
+      ansible.builtin.assert:
+        that:
+          - "'UHD Graphics 630' in nexo_vulkaninfo.stdout"
+        fail_msg: "Intel UHD 630 not visible to Vulkan — check mesa-vulkan-drivers and /dev/dri permissions."
+      when:
+        - not ansible_check_mode
+        - not nexo_simulation
+
+    - name: "Model vault — ensure {{ nexo_model_dir }}"
+      ansible.builtin.file:
+        path: "{{ nexo_model_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Model vault — check local weight state"
+      ansible.builtin.stat:
+        path: "{{ nexo_model_dir }}/{{ nexo_model_file }}"
+      register: nexo_model_stat
+
+    - name: "Model vault — seed GGUF from Hugging Face (async, skipped in simulation)"
+      ansible.builtin.get_url:
+        url: "{{ nexo_model_url }}"
+        dest: "{{ nexo_model_dir }}/{{ nexo_model_file }}"
+        mode: "0644"
+      async: 3600
+      poll: 30
+      when:
+        - not nexo_model_stat.stat.exists
+        - not nexo_simulation
+        - not ansible_check_mode
+
+    - name: "Model maintenance — weekly stale purge (Sun 03:00, mtime +7d)"
+      ansible.builtin.cron:
+        name: "Purge stale AI model files"
+        weekday: "0"
+        hour: "3"
+        minute: "0"
+        job: "find {{ nexo_model_dir }} -type f -mtime +7 -delete"
+
+    - name: "Rootless Podman — resolve app user uid"
+      ansible.builtin.command: "id -u {{ nexo_app_user }}"
+      register: nexo_uid_raw
+      changed_when: false
+
+    - name: "Rootless Podman — register subuid range"
+      ansible.builtin.lineinfile:
+        path: /etc/subuid
+        regexp: "^{{ nexo_app_user }}:"
+        line: "{{ nexo_app_user }}:100000:65536"
+        create: true
+        mode: "0644"
+
+    - name: "Rootless Podman — register subgid range"
+      ansible.builtin.lineinfile:
+        path: /etc/subgid
+        regexp: "^{{ nexo_app_user }}:"
+        line: "{{ nexo_app_user }}:100000:65536"
+        create: true
+        mode: "0644"
+
+    - name: "Rootless Podman — enable user linger (containers survive logout)"
+      ansible.builtin.command: "loginctl enable-linger {{ nexo_app_user }}"
+      changed_when: false
+      failed_when: false
+
+    - name: "Inference engine — check container presence"
+      ansible.builtin.command: "podman container exists {{ nexo_container_name }}"
+      register: nexo_container_exists
+      changed_when: false
+      failed_when: false
+      become: true
+      become_user: "{{ nexo_app_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ nexo_uid_raw.stdout | trim }}"
+
+    - name: "Inference engine — deploy rootless Vulkan llama.cpp container (cores 2-5, -ngl 99)"
+      ansible.builtin.command: >-
+        podman run -d
+        --name {{ nexo_container_name }}
+        --replace
+        --restart unless-stopped
+        --device /dev/dri
+        --cap-drop ALL
+        --cap-add IPC_LOCK
+        --cap-add SYS_NICE
+        --security-opt no-new-privileges:true
+        --cpuset-cpus {{ nexo_isolated_cores }}
+        -p 8080:8080
+        -v {{ nexo_model_dir }}:/models:ro
+        --health-cmd "curl -sf http://127.0.0.1:8080/health || exit 1"
+        --health-interval 30s
+        --health-timeout 5s
+        --health-retries 3
+        --health-start-period 10s
+        {{ nexo_container_image }}
+        -m /models/{{ nexo_model_file }}
+        --host 0.0.0.0 --port 8080 -ngl {{ nexo_ngl }} -t {{ nexo_threads }}
+        --ctx-size {{ nexo_ctx_size }}
+      become: true
+      become_user: "{{ nexo_app_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ nexo_uid_raw.stdout | trim }}"
+      when:
+        - not nexo_simulation
+        - not ansible_check_mode
+      register: nexo_podman_run
+
+    - name: "Security remediation — bind Ollama to loopback (probe-03 blindspot T-002)"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ollama.service.d/loopback.conf
+        content: |
+          [Service]
+          Environment="OLLAMA_HOST=127.0.0.1:11434"
+        mode: "0644"
+      notify: "Reload systemd and restart ollama"
+      when: ansible_facts.services['ollama.service'] is defined
+
+    - name: "nftables containment — ensure include directory"
+      ansible.builtin.file:
+        path: /etc/nftables.d
+        state: directory
+        mode: "0755"
+
+    - name: "nftables containment — deploy interface-detection defaults"
+      ansible.builtin.copy:
+        src: files/acidwurx-interfaces.nft
+        dest: /etc/nftables/acidwurx-interfaces.nft
+        mode: "0644"
+
+    - name: "nftables containment — deploy mesh containment ruleset (drop mDNS/SSDP)"
+      ansible.builtin.copy:
+        src: files/mesh-containment.nft
+        dest: /etc/nftables.d/60-nexo-mesh.nft
+        mode: "0644"
+
+    - name: "nftables containment — wire include into /etc/nftables.conf"
+      ansible.builtin.lineinfile:
+        path: /etc/nftables.conf
+        line: 'include "/etc/nftables.d/*.nft"'
+        insertafter: "^flush ruleset"
+        create: true
+        mode: "0755"
+
+    - name: "nftables containment — enable and (re)load service"
+      ansible.builtin.systemd_service:
+        name: nftables
+        state: restarted
+        enabled: true
+      when: not ansible_check_mode
+
+# -----------------------------------------------------------------------------
+- name: "Gateway profile — markslone (WARP breakout, PXE, cockpit, WoL relay)"
+  hosts: gateway
+  become: true
+  gather_facts: true
+  handlers:
+    - name: "Restart nexo-wol listener"
+      ansible.builtin.systemd_service:
+        name: nexo-wol
+        state: restarted
+        daemon_reload: true
+    - name: "Restart cloudflared"
+      ansible.builtin.systemd_service:
+        name: cloudflared
+        state: restarted
+        daemon_reload: true
+
+  tasks:
+    - name: "Package facts — normalize Arch vs Debian tooling"
+      ansible.builtin.set_fact:
+        nexo_pkg_wg: "{{ 'wireguard-tools' }}"
+        nexo_pkg_nft: "{{ 'nftables' }}"
+        nexo_pkg_utils: "{{ ['curl', 'jq', 'tmux', 'ethtool', 'util-linux'] }}"
+
+    - name: "Install core gateway packages (distribution-agnostic package module)"
+      ansible.builtin.package:
+        name: "{{ [nexo_pkg_wg, nexo_pkg_nft] + nexo_pkg_utils }}"
+        state: present
+
+    - name: "Spindle protection — zram generator (Arch) or zram-tools (Debian)"
+      ansible.builtin.package:
+        name: "{{ 'zram-generator' if ansible_facts.os_family == 'Archlinux' else 'zram-tools' }}"
+        state: present
+      failed_when: false
+
+    - name: "Spindle protection — low-write sysctls (BFQ-friendly, conntrack cap 65536)"
+      ansible.builtin.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_file: /etc/sysctl.d/99-nexo-gateway.conf
+        reload: true
+      loop:
+        - { key: "vm.swappiness", value: "10" }
+        - { key: "net.netfilter.nf_conntrack_max", value: "65536" }
+        - { key: "net.core.somaxconn", value: "4096" }
+      loop_control:
+        label: "{{ item.key }}={{ item.value }}"
+      failed_when: false
+
+    - name: "WARP — install pinned wgcf binary (static conf generator; NEVER warp-cli, Law 4)"
+      ansible.builtin.get_url:
+        url: "{{ wgcf_url }}"
+        dest: /usr/local/bin/wgcf
+        mode: "0755"
+      when: not nexo_simulation
+
+    - name: "WARP — ensure config directory"
+      ansible.builtin.file:
+        path: /etc/wireguard
+        state: directory
+        mode: "0700"
+
+    - name: "WARP — write wgcf.conf from hydrated env secrets (skipped when WARP_PRIVATE_KEY absent)"
+      ansible.builtin.copy:
+        dest: /etc/wireguard/wgcf.conf
+        mode: "0600"
+        content: |
+          [Interface]
+          PrivateKey = {{ lookup('ansible.builtin.env', 'WARP_PRIVATE_KEY') }}
+          Address = {{ lookup('ansible.builtin.env', 'WARP_ADDRESS') | default(wgcf_address_default, true) }}
+          MTU = {{ wgcf_mtu }}
+          [Peer]
+          PublicKey = {{ wgcf_pubkey }}
+          AllowedIPs = 0.0.0.0/0
+          Endpoint = {{ warp_endpoints[0] }}
+          PersistentKeepalive = 25
+      no_log: true
+      when: lookup('ansible.builtin.env', 'WARP_PRIVATE_KEY') | length > 0
+
+    - name: "WARP — deploy validated policy-routing hooks (wgcf-up.sh / wgcf-down.sh)"
+      ansible.builtin.copy:
+        src: "files/{{ item }}"
+        dest: "/etc/wireguard/{{ item }}"
+        mode: "0755"
+      loop:
+        - wgcf-up.sh
+        - wgcf-down.sh
+
+    - name: "WARP — append PostUp/PreDown hooks into wgcf.conf (idempotent)"
+      ansible.builtin.blockinfile:
+        path: /etc/wireguard/wgcf.conf
+        marker: "# {mark} AcidWurx policy-routing hooks"
+        insertafter: "\\[Interface\\]"
+        block: |
+          PostUp = /etc/wireguard/wgcf-up.sh
+          PreDown = /etc/wireguard/wgcf-down.sh
+      when: lookup('ansible.builtin.fileglob', '/etc/wireguard/wgcf.conf', errors='ignore') | length > 0
+
+    - name: "WARP — enable wg-quick@wgcf (starts only when wgcf.conf exists)"
+      ansible.builtin.systemd_service:
+        name: "wg-quick@wgcf"
+        enabled: true
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: "Routing — deploy interface-agnostic routing manager"
+      ansible.builtin.copy:
+        src: files/acidwurx-setup-routing.sh
+        dest: /usr/local/bin/acidwurx-setup-routing.sh
+        mode: "0755"
+
+    - name: "Routing — oneshot unit applying policy routing at boot"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/nexo-routing.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=AcidWurx policy routing (WARP breakout + mesh bypass)
+          After=network-online.target wg-quick@wgcf.service
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/usr/local/bin/acidwurx-setup-routing.sh
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: "Routing — enable nexo-routing"
+      ansible.builtin.systemd_service:
+        name: nexo-routing
+        state: started
+        enabled: true
+        daemon_reload: true
+      when: not ansible_check_mode
+
+    - name: "WoL relay — deploy stdlib listener (port {{ wol_listener_port }})"
+      ansible.builtin.copy:
+        src: files/wol_listener.py
+        dest: /opt/nexo/wol_listener.py
+        mode: "0755"
+
+    - name: "WoL relay — systemd unit"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/nexo-wol.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=AcidWurx Wake-on-LAN relay for S5 appliance
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          EnvironmentFile=-/etc/nexo/wol.env
+          ExecStart=/usr/bin/python3 /opt/nexo/wol_listener.py
+          Restart=on-failure
+          RestartSec=5
+          MemoryMax=64M
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: "WoL relay — env file (target MAC hydrated at bootstrap, 0600)"
+      ansible.builtin.copy:
+        dest: /etc/nexo/wol.env
+        mode: "0600"
+        content: |
+          WOL_LISTEN_PORT={{ wol_listener_port }}
+          TARGET_APPLIANCE_MAC={{ lookup('ansible.builtin.env', 'TARGET_APPLIANCE_MAC') | default('00:00:00:00:00:00', true) }}
+      notify: "Restart nexo-wol listener"
+
+    - name: "WoL relay — enable listener"
+      ansible.builtin.systemd_service:
+        name: nexo-wol
+        state: started
+        enabled: true
+        daemon_reload: true
+      when: not ansible_check_mode
+
+    - name: "Edge tunnel — install cloudflared (Debian deb or Arch package)"
+      ansible.builtin.package:
+        name: cloudflared
+        state: present
+      failed_when: false
+
+    - name: "Edge tunnel — token-mode systemd unit (remotely-managed ingress)"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/cloudflared.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=cloudflared (AcidWurx {{ tunnel_name }})
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=notify
+          EnvironmentFile=/etc/nexo/cloudflared.env
+          ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run
+          Restart=on-failure
+          RestartSec=5
+          TimeoutStartSec=20
+          MemoryMax=256M
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: "Restart cloudflared"
+
+    - name: "Edge tunnel — env file (CF_TUNNEL_TOKEN hydrated at bootstrap, 0600)"
+      ansible.builtin.copy:
+        dest: /etc/nexo/cloudflared.env
+        mode: "0600"
+        content: |
+          TUNNEL_TOKEN={{ lookup('ansible.builtin.env', 'CF_TUNNEL_TOKEN') | default('', true) }}
+      no_log: true
+
+    - name: "Edge tunnel — enable cloudflared (starts only when token present)"
+      ansible.builtin.systemd_service:
+        name: cloudflared
+        enabled: true
+        daemon_reload: true
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: "nftables containment — deploy ruleset + interface defaults"
+      ansible.builtin.copy:
+        src: "files/{{ item.src }}"
+        dest: "{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: acidwurx-interfaces.nft, dest: /etc/nftables/acidwurx-interfaces.nft }
+        - { src: mesh-containment.nft, dest: /etc/nftables.d/60-nexo-mesh.nft }
+
+    - name: "nftables containment — wire include"
+      ansible.builtin.lineinfile:
+        path: /etc/nftables.conf
+        line: 'include "/etc/nftables.d/*.nft"'
+        insertafter: "^flush ruleset"
+        create: true
+        mode: "0755"
+
+    - name: "nftables containment — enable service"
+      ansible.builtin.systemd_service:
+        name: nftables
+        state: restarted
+        enabled: true
+      when: not ansible_check_mode
+
+    - name: "AI Cockpit — deploy compose stack files (Open WebUI + LiteLLM + SearXNG)"
+      ansible.builtin.copy:
+        src: "files/{{ item.src }}"
+        dest: "/opt/nexo/cockpit/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: cockpit-compose.yml, dest: docker-compose.yml }
+        - { src: litellm-config.yaml, dest: litellm-config.yaml }
+        - { src: searxng-settings.yml, dest: searxng/settings.yml }
+
+    - name: "AI Cockpit — compose up (ionice -c3, Law 4; limits protect the 8GB ceiling)"
+      ansible.builtin.command: >-
+        ionice -c3 docker compose -f /opt/nexo/cockpit/docker-compose.yml up -d
+      changed_when: false
+      when:
+        - not nexo_simulation
+        - not ansible_check_mode
+        - ansible_facts.services['docker.service'] is defined
+
+    - name: "NetBoot.xyz — deploy PXE engine compose (host network, 69/udp + 8080/tcp)"
+      ansible.builtin.copy:
+        src: files/netboot-compose.yml
+        dest: /opt/nexo/netboot/docker-compose.yml
+        mode: "0644"
+
+    - name: "NetBoot.xyz — custom staging menu"
+      ansible.builtin.copy:
+        src: files/custom-menu.ipxe
+        dest: /opt/nexo/netboot/assets/custom-menu.ipxe
+        mode: "0644"
+
+    - name: "NetBoot.xyz — compose up (idempotent)"
+      ansible.builtin.command: >-
+        ionice -c3 docker compose -f /opt/nexo/netboot/docker-compose.yml up -d
+      changed_when: false
+      when:
+        - not nexo_simulation
+        - not ansible_check_mode
+        - ansible_facts.services['docker.service'] is defined
+
+# -----------------------------------------------------------------------------
+- name: "Legacy profile — barryslone (container-free NAS, 3GB ceiling)"
+  hosts: legacy
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Guard — enforce container-free law (Law 1: no Docker/Podman on 3GB Phenom)"
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['docker.service'] is not defined
+        fail_msg: "Docker detected on barryslone — violates Law 1 (container-free NAS)."
+
+    - name: "Guard — RAM ceiling check"
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.memtotal_mb | int <= 4096
+        quiet: true
+
+    - name: "Low-RAM sysctls (cache pressure + swappiness)"
+      ansible.builtin.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_file: /etc/sysctl.d/99-nexo-legacy.conf
+        reload: true
+      loop:
+        - { key: "vm.swappiness", value: "10" }
+        - { key: "vm.vfs_cache_pressure", value: "50" }
+      loop_control:
+        label: "{{ item.key }}={{ item.value }}"
+
+    - name: "Backup — install native Restic binary (no containers, pinned version)"
+      ansible.builtin.get_url:
+        url: "{{ restic_url }}"
+        dest: /tmp/restic.bz2
+        mode: "0644"
+      when: not nexo_simulation
+
+    - name: "Backup — decompress Restic into /usr/local/bin"
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          if [ ! -x /usr/local/bin/restic ]; then
+            bunzip2 -c /tmp/restic.bz2 > /usr/local/bin/restic
+            chmod 0755 /usr/local/bin/restic
+          fi
+          rm -f /tmp/restic.bz2
+      when: not nexo_simulation
+      changed_when: false
+
+    - name: "Backup — repository initialization guidance (env-gated, zero prompts)"
+      ansible.builtin.debug:
+        msg: >-
+          Restic installed. Init the USB repo non-interactively with:
+          RESTIC_REPOSITORY=/mnt/usb-backup RESTIC_PASSWORD_FILE=/etc/nexo/restic.pass
+          restic init  (bootstrap.sh performs this when both env vars are set).
+      when: lookup('ansible.builtin.env', 'RESTIC_REPOSITORY') | length == 0
+
+    - name: "Spindle — hdparm 15-minute spin-down profile"
+      ansible.builtin.copy:
+        dest: /etc/hdparm.conf
+        mode: "0644"
+        content: |
+          {{ nas_disk }} {
+              spindown_time = {{ (hdparm_spindown_seconds / 5) | int }}
+              write_cache = on
+          }
+      when: ansible_facts.os_family == "Debian"
+
+    - name: "Spindle — apply immediately (non-persistent safety)"
+      ansible.builtin.command: "hdparm -S {{ (hdparm_spindown_seconds / 5) | int }} {{ nas_disk }}"
+      changed_when: false
+      failed_when: false
+      when:
+        - not ansible_check_mode
+        - not nexo_simulation
+
+    - name: "Mount hygiene — verify noatime on {{ nas_partition }} (non-destructive check)"
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          if findmnt -no OPTIONS --source {{ nas_partition }} 2>/dev/null | grep -q noatime; then
+            echo "noatime: PRESENT"
+          else
+            echo "noatime: MISSING — remediation: edit /etc/fstab options for {{ nas_partition }} to include noatime, then remount"
+            exit 3
+          fi
+      register: nexo_noatime
+      changed_when: false
+      failed_when: false
+
+    - name: "Mount hygiene — surface noatime finding"
+      ansible.builtin.debug:
+        msg: "{{ nexo_noatime.stdout | default('noatime check skipped') }}"
+      when: nexo_noatime.stdout is defined
+
+    - name: "WoL persistence — ethtool unit (wake hooks survive power cycles)"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/nexo-wol-persist.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Persist Wake-on-LAN magic packet arm on barryslone
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/usr/sbin/ethtool -s eth0 wol g
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: "WoL persistence — enable"
+      ansible.builtin.systemd_service:
+        name: nexo-wol-persist
+        enabled: true
+        daemon_reload: true
+      failed_when: false
+      when: not ansible_check_mode

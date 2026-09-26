@@ -1,0 +1,16 @@
+# Budget Sentinel — REUSES the existing worker name acidwurx-cost-monitor per
+# the July account audit ("one worker = one billable entrypoint"). KV id is
+# substituted at deploy time by deploy_budget_sentinel.sh (@@SPEND_KV_ID@@).
+name = "acidwurx-cost-monitor"
+main = "src/index.ts"
+compatibility_date = "2024-10-01"
+
+[[kv_namespaces]]
+binding = "SPEND_KV"
+id = "@@SPEND_KV_ID@@"
+
+[vars]
+GATEWAY_ID = "acidwurx"
+CAP_PENCE = "500"
+DEFAULT_FREE_MODEL = "@cf/meta/llama-3.2-1b-instruct"
+ACCOUNT_ID = "@@CF_ACCOUNT_ID@@"

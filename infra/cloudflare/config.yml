@@ -1,0 +1,23 @@
+# =============================================================================
+# /etc/cloudflared/config.yml — REFERENCE for locally-managed tunnel mode.
+# PRIMARY MODE IS TOKEN (remotely-managed ingress via Pulumi; systemd unit
+# reads TUNNEL_TOKEN from /etc/nexo/cloudflared.env). Keep this file in sync
+# with infra/pulumi/index.ts ingress rules — divergence = 404s at the edge
+# (archive Bug 2 lesson: edge and local path maps MUST match identically).
+#
+# For locally-managed mode replace the tunnel name with the tunnel UUID and
+# drop the credentials JSON at the path below (bootstrap can render both).
+# =============================================================================
+# tunnel: <TUNNEL_UUID>
+# credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: api.acidwurx.org
+    path: ^/v1/.*$
+    service: http://192.168.1.138:8080
+  - hostname: api.acidwurx.org
+    path: ^/mcp/.*$
+    service: http://192.168.1.138:8000
+  - hostname: cockpit.acidwurx.org
+    service: http://192.168.1.179:3000
+  - service: http_status:404

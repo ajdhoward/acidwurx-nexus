@@ -1,0 +1,22 @@
+# NetBoot.xyz PXE engine — markslone, host network mode (69/udp TFTP +
+# 8080/tcp assets). OpenWrt (sharon) hands out DHCP options 66/67 pointing
+# here; see infra/netbootxyz/openwrt-uci.md. Archive-validated layout.
+name: nexo-netboot
+
+services:
+  netbootxyz:
+    image: ghcr.io/netbootxyz/netbootxyz:latest
+    container_name: nexo-netboot
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+    volumes:
+      - ./config:/config
+      - ./assets:/assets
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"

@@ -1,0 +1,53 @@
+name: Bug / Inference Failure
+about: Report an architecture or inference failure in the AcidWurx AI Mesh.
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Verification-honesty rule (AI_README Law 10): attach the REAL failing
+        command output. Reports without reproduction evidence are closed.
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Pipeline stage where the failure occurred
+      options:
+        - "Stage 1-2: hydration / keygen"
+        - "Stage 3-4: wave1 telemetry"
+        - "Stage 5: mesh route verification"
+        - "Stage 6: dry-run simulation"
+        - "Stage 7: approval gate"
+        - "Stage 8: edge apply"
+        - "Stage 9: bare-metal apply"
+        - "Stage 10: MCP task loop"
+    validations:
+      required: true
+  - type: dropdown
+    id: node
+    attributes:
+      label: Affected node
+      options:
+        - markslone
+        - jessicafletcher
+        - barryslone
+        - tanyacheex
+        - michaelknight
+        - sharon-openwrt
+        - cloudflare-edge
+        - ci-pipeline
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence (command + full output, non-zero exit codes, timestamps)
+      placeholder: "Paste terminal output between triple backticks."
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact & expected behavior
+    validations:
+      required: true

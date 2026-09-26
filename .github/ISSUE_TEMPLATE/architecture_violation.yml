@@ -1,0 +1,34 @@
+name: Architecture Violation
+about: Flag a change that violates an AI_README guardrail law.
+title: "[VIOLATION] "
+labels: ["architecture-violation"]
+body:
+  - type: dropdown
+    id: law
+    attributes:
+      label: Violated law (AI_README.md)
+      options:
+        - "Law 1: Container runtime boundaries"
+        - "Law 2: Overlay & routing invariants"
+        - "Law 3: Thread pinning & isolation"
+        - "Law 4: Spindle protection (markslone)"
+        - "Law 5: Zero public exposure"
+        - "Law 6: Budget & model policy"
+        - "Law 7: Validation before mutation"
+        - "Law 8: Idempotence & no zip-merge drift"
+        - "Law 9: Secrets hygiene"
+        - "Law 10: Verification honesty"
+    validations:
+      required: true
+  - type: input
+    id: artifact
+    attributes:
+      label: Offending file / PR / commit
+    validations:
+      required: true
+  - type: textarea
+    id: detail
+    attributes:
+      label: How the law is violated + proposed compliant alternative
+    validations:
+      required: true

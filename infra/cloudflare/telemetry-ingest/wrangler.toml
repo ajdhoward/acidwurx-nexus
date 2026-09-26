@@ -1,0 +1,18 @@
+# nexo-telemetry-ingest — wrangler fallback deployment path.
+# PRIMARY deployment is Pulumi (infra/pulumi/index.ts WorkerScript + D1 binding).
+# This file exists for manual/CI wrangler deploys; @@D1_DATABASE_ID@@ and the
+# account are substituted at runtime by deploy_telemetry_ingest.sh — deploying
+# with unreplaced tokens fails loudly (honesty law).
+# Secret: npx wrangler secret put NEXO_INGEST_HMAC_KEY (value from .env, sops-managed).
+name = "nexo-telemetry-ingest"
+main = "worker.js"
+compatibility_date = "2026-07-23"
+
+[vars]
+SCHEMA_VERSION = "1"
+RATE_LIMIT_PER_MIN = "30"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nexo-telemetry"
+database_id = "@@D1_DATABASE_ID@@"

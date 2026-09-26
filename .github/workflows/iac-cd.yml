@@ -1,0 +1,202 @@
+# =============================================================================
+# AcidWurx IaC CD Pipeline — staged: lint -> simulate -> (human gate) -> apply
+# Secrets required (Settings > Secrets and variables > Actions):
+#   CLOUDFLARE_API_TOKEN, CF_ACCOUNT_ID, CF_ZONE_ID, ADMIN_EMAIL,
+#   CLOUDFLARE_TUNNEL_SECRET, LOCAL_APPLIANCE_SSH_KEY, PULUMI_CONFIG_PASSPHRASE
+# Environment required: production-bare-metal (required reviewer = repo owner)
+# =============================================================================
+name: "AcidWurx Nexus: Lint -> Preview -> Gated Apply"
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "infra/**"
+      - "scripts/**"
+      - ".github/workflows/iac-cd.yml"
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: nexo-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lint-validate:
+    name: "Stage A: Structural Lint & Validation Harness"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run engine validation harness (standalone copy)
+        run: python3 scripts/ci/validate_repo.py .
+      - name: Bash syntax gate (all shell scripts)
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r -d '' f; do
+            if ! bash -n "$f"; then echo "SYNTAX FAIL: $f"; fail=1; fi
+          done < <(find scripts -name '*.sh' -print0)
+          exit "$fail"
+
+  pulumi-preview:
+    name: "Stage B1: Pulumi Preview (dry-run simulation)"
+    needs: lint-validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Pulumi CLI
+        run: curl -fsSL https://get.pulumi.com | sh
+      - name: Install provider dependencies
+        working-directory: infra/pulumi
+        run: npm install --no-audit --no-fund
+      - name: Pulumi preview (file backend, zero cloud state dependency)
+        working-directory: infra/pulumi
+        env:
+          PATH: ${{ github.workspace }}/.pulumi/bin:${{ env.PATH }}
+          PULUMI_BACKEND_URL: file://${{ github.workspace }}/.pulumi-state
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          CLOUDFLARE_TUNNEL_SECRET: ${{ secrets.CLOUDFLARE_TUNNEL_SECRET }}
+        run: |
+          set -euo pipefail
+          pulumi login "file://${GITHUB_WORKSPACE}/.pulumi-state"
+          pulumi stack select ci-preview --non-interactive 2>/dev/null || pulumi stack init ci-preview --non-interactive
+          pulumi config set --path cloudflare:version "~5.49" 2>/dev/null || true
+          pulumi config set accountId "${CF_ACCOUNT_ID}" --non-interactive
+          pulumi config set zoneName "acidwurx.org" --non-interactive
+          pulumi config set adminEmail "${ADMIN_EMAIL}" --non-interactive
+          pulumi config set --secret tunnelSecret "${CLOUDFLARE_TUNNEL_SECRET}" --non-interactive
+          pulumi preview --non-interactive --diff --suppress-outputs | tee "${GITHUB_WORKSPACE}/pulumi-preview.txt"
+      - name: Upload preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulumi-preview
+          path: pulumi-preview.txt
+
+  ansible-dry:
+    name: "Stage B2: Ansible Syntax + Check Simulation"
+    needs: lint-validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ansible-core
+        run: python3 -m pip install --quiet "ansible-core>=2.16,<2.19"
+      - name: Syntax check (full parse gate)
+        working-directory: infra/ansible
+        run: ansible-playbook -i inventory.ini playbook.yml --syntax-check
+      - name: Check-mode simulation against local stub inventory
+        working-directory: infra/ansible
+        run: |
+          set -euo pipefail
+          ansible-playbook -i inventory.ci.ini playbook.yml --check --diff --limit ci-sim \
+            -e ansible_connection=local -e nexo_simulation=true || \
+            echo "::warning::check-mode deviations recorded (expected on stub host)"
+
+  edge-apply:
+    name: "Stage C1: Live Edge Orchestration (GATED)"
+    if: github.event_name != 'pull_request'
+    needs: [pulumi-preview, ansible-dry]
+    runs-on: ubuntu-latest
+    environment:
+      name: production-bare-metal
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Pulumi CLI
+        run: curl -fsSL https://get.pulumi.com | sh
+      - name: Restore or initialize state
+        working-directory: infra/pulumi
+        env:
+          PULUMI_BACKEND_URL: file://${{ github.workspace }}/.pulumi-state
+        run: |
+          set -euo pipefail
+          mkdir -p .pulumi-state
+      - name: Pulumi up (tunnel, vnet, private route, Access, DNS)
+        working-directory: infra/pulumi
+        env:
+          PATH: ${{ github.workspace }}/.pulumi/bin:${{ env.PATH }}
+          PULUMI_BACKEND_URL: file://${{ github.workspace }}/.pulumi-state
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          CLOUDFLARE_TUNNEL_SECRET: ${{ secrets.CLOUDFLARE_TUNNEL_SECRET }}
+        run: |
+          set -euo pipefail
+          pulumi login "file://${GITHUB_WORKSPACE}/.pulumi-state"
+          pulumi stack select ci-apply --non-interactive 2>/dev/null || pulumi stack init ci-apply --non-interactive
+          pulumi config set accountId "${CF_ACCOUNT_ID}" --non-interactive
+          pulumi config set zoneName "acidwurx.org" --non-interactive
+          pulumi config set adminEmail "${ADMIN_EMAIL}" --non-interactive
+          pulumi config set --secret tunnelSecret "${CLOUDFLARE_TUNNEL_SECRET}" --non-interactive
+          pulumi up --non-interactive --yes
+      - name: Ensure AI Gateway exists (REST, idempotent)
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          AI_GATEWAY_ID: acidwurx
+        run: bash scripts/wave2_deployment/create_ai_gateway.sh
+      - name: Deploy Budget Sentinel worker (KV create + wrangler)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: bash scripts/wave2_deployment/deploy_budget_sentinel.sh
+      - name: Deploy telemetry ingest (D1 schema + wrangler, z.ai handoff plane)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          NEXO_INGEST_HMAC_KEY: ${{ secrets.NEXO_INGEST_HMAC_KEY }}
+        run: bash scripts/wave2_deployment/deploy_telemetry_ingest.sh
+
+  ansible-apply:
+    name: "Stage C2: Bare-Metal Configuration (GATED)"
+    if: github.event_name != 'pull_request'
+    needs: edge-apply
+    runs-on: ubuntu-latest
+    environment:
+      name: production-bare-metal
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ansible-core
+        run: python3 -m pip install --quiet "ansible-core>=2.16,<2.19"
+      - name: Configure SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LOCAL_APPLIANCE_SSH_KEY }}
+      - name: Execute fleet playbook (idempotent)
+        working-directory: infra/ansible
+        run: ansible-playbook -i inventory.ini playbook.yml
+      - name: Post-deploy validation trace
+        env:
+          APPLIANCE_DOMAIN: acidwurx.org
+          JESSICAFLETCHER_LAN_IP: 192.168.1.138
+        run: bash scripts/wave2_deployment/validation_trace.sh

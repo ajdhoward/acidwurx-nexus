@@ -1,0 +1,28 @@
+# Secrets & local state — never commit
+.env
+.env.*
+!.env.example
+*.key
+keys.txt
+age-key*.txt
+sops-keys/
+.pulumi/
+*.tfstate
+*.tfstate.*
+kubeconfig
+
+# Discovery run artifacts (large, regenerated per wave)
+docs/discovery/wave1/run-*/
+!docs/discovery/wave1/.gitkeep
+
+# Runtime
+__pycache__/
+*.pyc
+*.log
+node_modules/
+dist/
+.wrangler/
+
+# OS noise
+.DS_Store
+Thumbs.db

@@ -1,0 +1,20 @@
+{
+  "name": "acidwurx-nexus-edge",
+  "version": "2.0.0",
+  "description": "AcidWurx Cloudflare Zero Trust edge plane (Pulumi TypeScript): mesh routing, Access JWT profiles, D1 telemetry sink, AI Gateway caching",
+  "main": "index.ts",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@pulumi/cloudflare": "~5.49.0",
+    "@pulumi/command": "^1.0.2",
+    "@pulumi/pulumi": "^3.140.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,63 @@
+# =============================================================================
+# LiteLLM router — OmniRouter pattern (dual-gateway inference).
+# Chain (archive-validated free-tier-only order):
+#   OpenRouter free -> Cloudflare Workers AI free -> LOCAL appliance/Ollama.
+# request_timeout 90s keeps streams inside the Cloudflare 120s edge limit
+# (known failure mode from the archive: 120-second timeout on long tokens).
+# =============================================================================
+model_list:
+  - model_name: acidwurx-coder
+    litellm_params:
+      model: openai/qwen2.5-coder-7b-instruct
+      api_base: http://192.168.1.138:8080/v1
+      api_key: "not-needed"
+
+  - model_name: acidwurx-local
+    litellm_params:
+      model: ollama/qwen2.5-coder:7b
+      api_base: http://192.168.1.138:11434
+
+  - model_name: wai-free-1b
+    litellm_params:
+      model: cloudflare/@cf/meta/llama-3.2-1b-instruct
+      cloudflare_account_id: os.environ/CLOUDFLARE_ACCOUNT_ID
+      api_key: os.environ/CLOUDFLARE_API_TOKEN
+
+  - model_name: wai-free-8b
+    litellm_params:
+      model: cloudflare/@cf/meta/llama-3-8b-instruct
+      cloudflare_account_id: os.environ/CLOUDFLARE_ACCOUNT_ID
+      api_key: os.environ/CLOUDFLARE_API_TOKEN
+
+  - model_name: or-free-flash-lite
+    litellm_params:
+      model: openrouter/google/gemini-2.5-flash-lite:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: or-free-llama8b
+    litellm_params:
+      model: openrouter/meta-llama/llama-3-8b-instruct:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+router_settings:
+  routing_strategy: usage-based-routing-v2
+  num_retries: 2
+  timeout: 90
+  request_timeout: 90
+  redis_enabled: false
+  fallbacks:
+    - or-free-flash-lite: ["wai-free-1b", "acidwurx-coder"]
+    - or-free-llama8b: ["wai-free-8b", "acidwurx-coder"]
+    - wai-free-1b: ["acidwurx-local"]
+    - wai-free-8b: ["acidwurx-coder"]
+    - acidwurx-coder: ["wai-free-8b", "acidwurx-local"]
+    - acidwurx-local: ["wai-free-1b"]
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  request_timeout: 90
+  telemetry: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

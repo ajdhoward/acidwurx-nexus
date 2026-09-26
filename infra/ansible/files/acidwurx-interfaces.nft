@@ -1,0 +1,7 @@
+# /etc/nftables/acidwurx-interfaces.nft
+# Static defaults — REWRITTEN at boot by acidwurx-setup-routing.sh with the
+# runtime-detected interface names (interface-agnostic law). Non-existent
+# names in nftables sets are legal (they simply never match).
+define wan_ifaces = { "eth0" }
+define warp_ifaces = { "wgcf", "CloudflareWARP", "warp0", "cfw0" }
+define mesh_ifaces = { "wgcf", "CloudflareWARP", "warp0", "cfw0" }

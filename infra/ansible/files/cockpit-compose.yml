@@ -1,0 +1,83 @@
+# =============================================================================
+# AI Cockpit — markslone ONLY Docker host (Law 1). Memory limits are hard law:
+# litellm 512M / searxng 256M / open-webui 1G (8GB ceiling + spindle budget).
+# Binds are pinned to the LAN IP (tunnel-fronted, never 0.0.0.0 — Law 5).
+# Env interpolation (LITELLM_MASTER_KEY, SEARXNG_SECRET, OPENROUTER_API_KEY,
+# CF_ACCOUNT_ID, CF_API_TOKEN) is hydrated by bootstrap.sh -> docker compose
+# environment; nothing secret is stored in this file.
+# =============================================================================
+name: nexo-cockpit
+
+networks:
+  nexo:
+    driver: bridge
+
+volumes:
+  open-webui-data:
+  litellm-cache:
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: nexo-litellm
+    restart: unless-stopped
+    command: ["--config", "/etc/litellm/litellm-config.yaml", "--port", "4000", "--num_workers", "2"]
+    ports:
+      - "192.168.1.179:4000:4000"
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?bootstrap must export LITELLM_MASTER_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CLOUDFLARE_API_TOKEN: ${CF_API_TOKEN:-}
+    volumes:
+      - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+      - litellm-cache:/tmp/litellm
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4000/health/liveliness"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - nexo
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: nexo-openwebui
+    restart: unless-stopped
+    depends_on:
+      litellm:
+        condition: service_healthy
+    ports:
+      - "192.168.1.179:3000:8080"
+    environment:
+      OPENAI_API_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY:?bootstrap must export LITELLM_MASTER_KEY}
+      ENABLE_OLLAMA_API: "false"
+      WEBUI_AUTH: "true"
+      ANONYMIZED_TELEMETRY: "false"
+      DO_NOT_TRACK: "true"
+    volumes:
+      - open-webui-data:/app/backend/data
+    mem_limit: 1g
+    cpus: 2.0
+    networks:
+      - nexo
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: nexo-searxng
+    restart: unless-stopped
+    ports:
+      - "192.168.1.179:8081:8080"
+    environment:
+      SEARXNG_BASE_URL: https://cockpit.acidwurx.org/searxng/
+      SEARXNG_SECRET: ${SEARXNG_SECRET_KEY:?bootstrap must export SEARXNG_SECRET_KEY}
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    mem_limit: 256m
+    cpus: 0.5
+    networks:
+      - nexo

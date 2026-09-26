@@ -1,0 +1,12 @@
+# sops configuration — age recipient pinned to this repository's vault key.
+# Encrypt:  sops --encrypt --in-place secrets/<file>.yaml
+# Decrypt:  SOPS_AGE_KEY_FILE=~/.config/nexo/age/keys.txt sops --decrypt <file>
+# The public key below is generated/derived by generate_nexus_engine.py at
+# scaffold time and matches the private key stored OUTSIDE this repository.
+creation_rules:
+  - path_regex: secrets/.*\.ya?ml$
+    age: "age1w5vshjjv9nqu79wnada4hft2m3lsp05p9zck00eplllwmwlk530qanmk5m"
+  - path_regex: secrets/.*\.json$
+    age: "age1w5vshjjv9nqu79wnada4hft2m3lsp05p9zck00eplllwmwlk530qanmk5m"
+  - path_regex: infra/ansible/group_vars/.*\.enc\.yml$
+    age: "age1w5vshjjv9nqu79wnada4hft2m3lsp05p9zck00eplllwmwlk530qanmk5m"

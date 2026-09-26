@@ -1,0 +1,38 @@
+name: "AcidWurx Automation: Self-Documenting Repository Map"
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "README.md"
+      - "AI_README.md"
+      - "REPO_MAP.md"
+
+jobs:
+  generate-tree:
+    name: "Crawl Directory and Update Architecture Map"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compile and auto-commit structural directory map
+        run: |
+          set -euo pipefail
+          {
+            echo "# AcidWurx Nexus Repository Map"
+            echo
+            echo "_Auto-generated on $(date -u +%Y-%m-%dT%H:%M:%SZ) from commit ${GITHUB_SHA}._"
+            echo
+            echo '```text'
+            tree -I 'node_modules|.git|__pycache__|.pulumi-state|.wrangler' -L 4 --noreport --charset utf-8
+            echo '```'
+          } > REPO_MAP.md
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add REPO_MAP.md
+          git diff --staged --quiet || git commit -m "docs: automated repository layout tree update"
+          git push

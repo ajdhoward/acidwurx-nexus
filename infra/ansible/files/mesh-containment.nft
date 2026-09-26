@@ -1,0 +1,31 @@
+#!/usr/sbin/nft -f
+# =============================================================================
+# mesh-containment.nft — zero-trust perimeter containment (archive-validated).
+# Drops WAN discovery protocols (mDNS UDP 5353, SSDP UDP 1900) in BOTH
+# directions on all mesh interfaces to prevent multi-node packet loops and
+# discovery leakage across the Cloudflare mesh / WARP fabric.
+# Law 4: NO logging rules (5400RPM spindle protection on markslone).
+# Counters are in-kernel only (zero disk writes).
+# Atomic replacement: nft -f this file flushes+reloads only this table.
+# =============================================================================
+
+include "/etc/nftables/acidwurx-interfaces.nft"
+
+table inet nexo_containment {
+    chain mesh_input {
+        type filter hook input priority filter; policy accept;
+        iifname $mesh_ifaces meta l4proto udp th dport { 5353, 1900 } counter drop
+        iifname $mesh_ifaces meta l4proto udp th dport { 137, 138, 139 } counter drop
+    }
+
+    chain mesh_output {
+        type filter hook output priority filter; policy accept;
+        oifname $mesh_ifaces meta l4proto udp th dport { 5353, 1900 } counter drop
+        oifname $mesh_ifaces meta l4proto udp th dport { 137, 138, 139 } counter drop
+    }
+
+    chain mesh_forward {
+        type filter hook forward priority filter; policy accept;
+        meta l4proto udp th dport { 5353, 1900 } oifname $mesh_ifaces counter drop
+    }
+}

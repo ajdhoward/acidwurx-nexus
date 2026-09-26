@@ -1,0 +1,31 @@
+# SearXNG minimal config — no-telemetry local doc search (cockpit plugin).
+# secret_key is injected via the SEARXNG_SECRET environment variable
+# (compose interpolation); never committed here.
+use_default_settings: true
+
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  image_proxy: false
+  method: "GET"
+
+ui:
+  static_use_hash: true
+  default_theme: simple
+  theme_args:
+    simple_style: dark
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en-GB"
+  formats:
+    - html
+    - json
+
+outgoing:
+  request_timeout: 8.0
+  max_request_timeout: 20.0
+  pool_connections: 32
+  pool_maxsize: 64

@@ -1,0 +1,84 @@
+# =============================================================================
+# group_vars/all.yml — single source of truth for fleet constants.
+# Every value is extracted from the operational archive (hardinfo2 telemetry,
+# validated routing scripts, August appliance spec, September master spec).
+# =============================================================================
+
+# --- Network facts -----------------------------------------------------------
+nexo_lan_subnet: "192.168.1.0/24"
+nexo_mesh_subnet: "100.64.0.0/10"
+appliance_ip: "192.168.1.138"
+gateway_ip: "192.168.1.179"
+nas_ip: "192.168.1.186"
+workstation_ip: "192.168.1.164"
+openwrt_primary_ip: "192.168.1.1"
+openwrt_secondary_ip: "192.168.1.250"
+isp_cgnat_ip: "88.97.176.163"
+warp_endpoints:
+  - "162.159.193.1:2408"
+  - "162.159.192.1:2408"
+warp_iface_patterns:
+  - "CloudflareWARP"
+  - "warp0"
+  - "wgcf"
+  - "cfw0"
+
+# --- Compute appliance (jessicafletcher) --------------------------------------
+nexo_isolated_cores: "2,3,4,5"
+nexo_isolcpus_range: "2-5"
+nexo_os_cores: "0,1"
+nexo_hugepages: 512
+nexo_model_dir: "/var/lib/models"
+nexo_model_file: "qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+nexo_model_url: "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+nexo_container_image: "ghcr.io/ggerganov/llama.cpp:server-vulkan"
+nexo_container_name: "acidwurx-llama"
+nexo_ctx_size: 8192
+nexo_threads: 4
+nexo_ngl: 99
+nexo_app_user: "adam"
+nexo_sysctl_perf:
+  vm.nr_hugepages: "512"
+  vm.dirty_background_ratio: "5"
+  vm.dirty_ratio: "10"
+  vm.zone_reclaim_mode: "0"
+  vm.swappiness: "10"
+  net.core.somaxconn: "4096"
+  net.core.rmem_max: "16777216"
+  net.core.wmem_max: "16777216"
+
+# --- Gateway (markslone) -------------------------------------------------------
+wgcf_version: "2.2.23"
+wgcf_url: "https://github.com/ViRb3/wgcf/releases/download/v{{ wgcf_version }}/wgcf_{{ wgcf_version }}_Linux_x86_64"
+wgcf_iface: "wgcf"
+wgcf_mtu: 1280
+wgcf_address_default: "172.16.0.2/32"
+wgcf_pubkey: "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo="
+rt_bypass_table: 10
+rt_breakout_table: 100
+cockpit_mem_limits:
+  litellm: "512m"
+  searxng: "256m"
+  open_webui: "1g"
+  ollama: "2g"
+
+# --- Legacy (barryslone) --------------------------------------------------------
+restic_version: "0.17.3"
+restic_url: "https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{ restic_version }}_linux_amd64.bz2"
+hdparm_spindown_seconds: 180
+nas_disk: "/dev/sda"
+nas_partition: "/dev/sda1"
+
+# --- Domains & edge --------------------------------------------------------------
+appliance_domain: "acidwurx.org"
+api_hostname: "api.acidwurx.org"
+cockpit_hostname: "cockpit.acidwurx.org"
+ai_gateway_id: "acidwurx"
+daily_spend_cap_pence: 500
+tunnel_name: "acidwurx-bare-metal"
+wol_listener_port: 9000
+
+# --- Runtime switches --------------------------------------------------------------
+# nexo_simulation=true skips reboots, downloads, and container mutation
+# (set automatically by CI check-mode; never set on production runs).
+nexo_simulation: false

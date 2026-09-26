@@ -16,7 +16,11 @@ RUN_ID="$(date +%Y%m%d-%H%M%S)"
 OUT_DIR="${NEXO_OUT_DIR:-${REPO_ROOT}/docs/discovery/wave1/run-${RUN_ID}}"
 PROBE_TIMEOUT="${PROBE_TIMEOUT:-600}"
 export NEXO_OUT_DIR="${OUT_DIR}"
-export NEXO_NODE_NAME="${NEXO_NODE_NAME:-$(hostname -s 2>/dev/null || hostname)}"
+# Node name: never empty. hostname(1) may be absent on minimal installs
+# (observed on TanyaCheex/Arch) — fall back through /proc, bash $HOSTNAME.
+NODE_GUESS="$(cat /proc/sys/kernel/hostname 2>/dev/null || hostname -s 2>/dev/null || printf '%s' "${HOSTNAME:-}")"
+[ -n "${NODE_GUESS}" ] || NODE_GUESS="unknown"
+export NEXO_NODE_NAME="${NEXO_NODE_NAME:-${NODE_GUESS}}"
 
 mkdir -p "${OUT_DIR}"
 echo "[orchestrator] run ${RUN_ID} node ${NEXO_NODE_NAME} out ${OUT_DIR}"
@@ -117,7 +121,7 @@ if os.path.exists(ec_path):
 summary = {
     "run_id": os.path.basename(out_dir),
     "generated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    "node": os.environ.get("NEXO_NODE_NAME", "unknown"),
+    "node": os.environ.get("NEXO_NODE_NAME") or "unknown",
     "probe_count": len(results),
     "exit_codes": exit_codes,
     "probes": results,

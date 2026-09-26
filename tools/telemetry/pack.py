@@ -220,8 +220,9 @@ def main():
         sys.stdout.write(redact(render_briefing(results, run_dir, flags)) + "\n")
         return 0
 
-    node = os.environ.get("NEXO_NODE_NAME") or results.get("node", "unknown")
-    run_id = results.get("run_id", os.path.basename(run_dir))
+    node_raw = os.environ.get("NEXO_NODE_NAME") or results.get("node") or "unknown"
+    node = re.sub(r"[^A-Za-z0-9._-]", "_", str(node_raw)).strip("._-") or "unknown"
+    run_id = results.get("run_id") or os.path.basename(run_dir)
     dest = os.path.join(args.out, node, run_id)
     os.makedirs(dest, exist_ok=True)
 

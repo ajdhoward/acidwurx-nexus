@@ -103,10 +103,13 @@
      "steps": ["ssh markslone 'sudo /usr/local/bin/acidwurx-setup-routing.sh && ip rule show | head -8'"], "verify": ""},
 
     {"id": "R-NODE-UNREACHABLE", "when": {"type": "host_unreachable"}, "severity": "high", "risk": "gated",
-     "title": "Fleet node {name} unreachable — WoL wake then re-probe", "target": "{name}",
-     "steps": ["curl -s -X POST http://192.168.1.179:9000/wake -H 'Content-Type: application/json' -d '{\"mac\":\"<MAC from probe 07 leases>\"}'",
-                "sleep 45 && ping -c2 {ip}"],
-     "verify": "", "notes": "If WoL relay is not yet deployed (Stage 9), this route is physical-power-only."},
+     "title": "Fleet node {name} unreachable — diagnose: SSH trust vs host down, then WoL", "target": "{name}",
+     "steps": ["ping -c1 -W2 {ip} >/dev/null 2>&1 && echo '{name}: host UP — this is SSH key trust, not a power problem' || echo '{name}: host DOWN — WoL or physical power needed'",
+                "test -f \"$HOME/.ssh/id_ed25519.pub\" || ssh-keygen -t ed25519 -N '' -f \"$HOME/.ssh/id_ed25519\"",
+                "ssh-copy-id -i \"$HOME/.ssh/id_ed25519.pub\" adam@{ip}   # ONE-TIME interactive password (credential provisioning — the sanctioned exception to zero-prompt)",
+                "curl -s -X POST http://192.168.1.179:9000/wake -H 'Content-Type: application/json' -d '{\"mac\":\"<MAC from probe 07 leases>\"}'   # only if host DOWN and WoL relay deployed",
+                "sleep 45; ping -c2 {ip}"],
+     "verify": "", "notes": "BatchMode ssh failing on ALL nodes almost always means key trust was never provisioned (first wave). Run the ssh-copy-id pass once per node; probes 06/07, fleet_backup and fleet_apply all depend on it."},
 
     {"id": "R-FAILED-UNITS", "when": {"type": "failed_units"}, "severity": "high", "risk": "gated",
      "title": "{count} failed systemd unit(s) on {node}: {list}", "target": "{node}",

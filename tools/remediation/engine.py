@@ -219,9 +219,9 @@ def write_plan(run_dir, routed, unrouted, facts):
     for item in routed:
         groups.setdefault(item["rule"].get("risk", "human"), []).append(item)
     lines = ["# Remediation Plan — %s" % datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-             "", "Facts extracted: %d | routed: %d | unrouted: %d | coverage: %.0f%%" % (
+             "", "Facts extracted: %d | routed entries: %d | unrouted: %d | coverage: %.0f%%" % (
                  len(facts), len(routed), len(unrouted),
-                 (100.0 * len(routed) / len(facts)) if facts else 100.0), ""]
+                 (100.0 * (len(facts) - len(unrouted)) / len(facts)) if facts else 100.0), ""]
     for risk in ("auto-safe", "gated", "human"):
         lines.append("## %s (%d)" % (risk.upper(), len(groups[risk])))
         for item in groups[risk]:
@@ -382,15 +382,17 @@ def main():
     routed, unrouted = evaluate(facts, rules_doc)
     routed = dedupe(routed)
     if args.coverage:
+        routed_facts = len(facts) - len(unrouted)
         total = len(facts) or 1
         print("facts=%d routed=%d unrouted=%d coverage=%.1f%%" % (
-            len(facts), len(routed), len(unrouted), 100.0 * len(routed) / total))
+            len(facts), routed_facts, len(unrouted), 100.0 * routed_facts / total))
         return 0
     plan = write_plan(run_dir, routed, unrouted, facts)
     executor = write_executor(run_dir, routed)
     added = seed_tasks(routed, unrouted, facts)
-    coverage = (100.0 * len(routed) / len(facts)) if facts else 100.0
-    print("[remediate] facts=%d routed=%d unrouted=%d coverage=%.0f%%" % (len(facts), len(routed), len(unrouted), coverage))
+    routed_facts = len(facts) - len(unrouted)
+    coverage = (100.0 * routed_facts / len(facts)) if facts else 100.0
+    print("[remediate] facts=%d routed=%d unrouted=%d coverage=%.0f%%" % (len(facts), routed_facts, len(unrouted), coverage))
     print("[remediate] plan: %s" % plan)
     print("[remediate] executor: %s (dry by default; APPLY=1 to execute auto-safe routes)" % executor)
     print("[remediate] task board: +%d row(s)" % added)

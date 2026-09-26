@@ -47,8 +47,10 @@ echo "[push] run-dir: ${RUN_DIR} (dry-run=${DRY_RUN})"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "${STAGE}"' EXIT
 python3 "${REPO_ROOT}/tools/telemetry/pack.py" --run-dir "${RUN_DIR}" --out "${STAGE}"
-STAGED_RUN="$(find "${STAGE}" -mindepth 2 -maxdepth 2 -type d | head -1)"
-if [ -z "${STAGED_RUN}" ]; then echo "[push] FATAL: pack.py produced no bundle"; exit 1; fi
+STAGED_RUN="$(dirname "$(find "${STAGE}" -name INDEX.json -type f | head -1)")"
+if [ -z "${STAGED_RUN}" ] || [ "${STAGED_RUN}" = "." ] || [ ! -d "${STAGED_RUN}" ]; then
+  echo "[push] FATAL: pack.py produced no bundle (looked for INDEX.json under ${STAGE})"; exit 1
+fi
 NODE="$(basename "$(dirname "${STAGED_RUN}")")"
 RUN_ID="$(basename "${STAGED_RUN}")"
 

@@ -70,5 +70,5 @@ if findings:
         print("  * %s" % f)
     sys.exit(1)
 print("GO — no secret-shaped strings, no forbidden tracked paths, gitignore coverage OK.")
-print("Publish with: gh repo edit <owner>/acidwurx-nexus --visibility public --accept-ownership-confirmation")
+print("Publish with: gh repo edit <owner>/acidwurx-nexus --visibility public --accept-visibility-change-consequences")
 sys.exit(0)

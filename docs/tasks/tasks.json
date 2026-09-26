@@ -1,0 +1,205 @@
+{
+  "tasks": [
+    {
+      "id": "T-201",
+      "title": "[R-DHCP-DRIFT] Pin static DHCP lease for jessicafletcher (.138) on sharon \u2014 ends the .138/.139 drift",
+      "target": "sharon",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-DHCP-DRIFT",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-202",
+      "title": "[R-WARP-OFF-CLIENT] Client egress is direct-ISP (warp=off) \u2014 expected until Stage 9 applies the gateway play (DHCP option-3 redirect + wgcf)",
+      "target": "",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-WARP-OFF-CLIENT",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-203",
+      "title": "[R-THERMAL-HIGH] Thermal ceiling exceeded (100.0C) \u2014 airflow/dust/paste check before sustained inference",
+      "target": "",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-THERMAL-HIGH",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-204",
+      "title": "[R-TOKEN-MISSING-GH] Hydrate GITHUB_TOKEN in .env to enable probes 04/09 + push flows",
+      "target": "local",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-TOKEN-MISSING-GH",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-205",
+      "title": "[R-NODE-UNREACHABLE] Fleet node barryslone unreachable \u2014 WoL wake then re-probe",
+      "target": "barryslone",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-NODE-UNREACHABLE",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-206",
+      "title": "[R-NODE-UNREACHABLE] Fleet node jessicafletcher unreachable \u2014 WoL wake then re-probe",
+      "target": "jessicafletcher",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-NODE-UNREACHABLE",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-207",
+      "title": "[R-NODE-UNREACHABLE] Fleet node tanyacheex unreachable \u2014 WoL wake then re-probe",
+      "target": "tanyacheex",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-NODE-UNREACHABLE",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-208",
+      "title": "[R-FAILED-UNITS] 1 failed systemd unit(s) on markslone: \u25cf",
+      "target": "markslone",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-FAILED-UNITS",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-209",
+      "title": "[R-TUNNEL-ROUTE-MISSING] Private route 192.168.1.0/24 not advertised through the tunnel \u2014 run the edge apply",
+      "target": "cloudflare",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-TUNNEL-ROUTE-MISSING",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-210",
+      "title": "[R-DISK-PRESSURE] Disk / at 99% on  \u2014 reclaim or expand",
+      "target": "",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-DISK-PRESSURE",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-211",
+      "title": "[R-DISK-PRESSURE] Disk /.snapshots at 99% on  \u2014 reclaim or expand",
+      "target": "",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-DISK-PRESSURE",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-212",
+      "title": "[R-DISK-PRESSURE] Disk /home at 99% on  \u2014 reclaim or expand",
+      "target": "",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-DISK-PRESSURE",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-213",
+      "title": "[R-DISK-PRESSURE] Disk /var at 99% on  \u2014 reclaim or expand",
+      "target": "",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-DISK-PRESSURE",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-214",
+      "title": "[R-NOATIME-MISSING] 5 data mount(s) without noatime \u2014 fstab edit + remount",
+      "target": "",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-NOATIME-MISSING",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-215",
+      "title": "[R-HISTORY-TOKENS] Scrub token-shaped strings from shell history + rotate the exposed credentials",
+      "target": "",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-HISTORY-TOKENS",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-216",
+      "title": "[R-ROTATION-TODO] Complete credential rotation: CF_API_TOKEN (cfut-prefixed token leaked in archive exports)",
+      "target": "cloudflare+fleet",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-ROTATION-TODO",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-217",
+      "title": "[R-ROTATION-TODO] Complete credential rotation: LITELLM_MASTER_KEY (leaked in archive exports)",
+      "target": "cloudflare+fleet",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-ROTATION-TODO",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-218",
+      "title": "[R-ROTATION-TODO] Complete credential rotation: SEARXNG_SECRET_KEY (leaked in archive exports)",
+      "target": "cloudflare+fleet",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-ROTATION-TODO",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-219",
+      "title": "[R-ROTATION-TODO] Complete credential rotation: Bitwarden session/master (leaked in archive exports)",
+      "target": "cloudflare+fleet",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-ROTATION-TODO",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    },
+    {
+      "id": "T-220",
+      "title": "[R-ROTATION-TODO] Complete credential rotation: wgcf WARP keys (July-era, if reused)",
+      "target": "cloudflare+fleet",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-ROTATION-TODO",
+      "created": "2026-09-26T19:47:01+00:00",
+      "updated": "2026-09-26T19:47:01+00:00"
+    }
+  ],
+  "updated": "2026-09-26T19:47:01+00:00"
+}

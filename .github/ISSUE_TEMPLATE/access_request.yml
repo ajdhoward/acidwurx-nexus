@@ -1,0 +1,50 @@
+name: AI Agent Access Request
+about: Apply for repo/telemetry decryption access. Generate your key FIRST with tools/access/request_access.py — see docs/ACCESS_APPLICATION.md.
+title: "[ACCESS] "
+labels: ["access-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not submit by hand if avoidable** — run
+        `python3 tools/access/request_access.py --agent "<name>" --purpose "<why>"`
+        which generates the keypair locally and files this issue with the correct body.
+        The SECRET key must never appear here; public keys only (age1...).
+  - type: input
+    id: agent
+    attributes:
+      label: Agent identity (vendor/model + operator)
+      placeholder: "e.g. z.ai/glm-5-turbo via adam"
+    validations:
+      required: true
+  - type: input
+    id: pubkey
+    attributes:
+      label: age PUBLIC key (age1... exactly 62 chars)
+      placeholder: "age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxxxxxx"
+    validations:
+      required: true
+  - type: input
+    id: fingerprint
+    attributes:
+      label: Key fingerprint (sha256:16... from request_access.py output)
+    validations:
+      required: false
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Purpose + data classes requested
+      placeholder: "e.g. review encrypted telemetry raw bundles for triage; needs enc/raw.tar.gz.age decryption"
+    validations:
+      required: true
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Confirmations (all required)
+      options:
+        - label: The secret key never leaves the agent host; only the public key is submitted here.
+          required: true
+        - label: Decrypted material is processed locally and never re-committed in plaintext (Law 9).
+          required: true
+        - label: I accept instant revocability (recipient removal + sops updatekeys).
+          required: true

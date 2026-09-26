@@ -92,7 +92,12 @@ python3 -c "import mcp; print('present')" > "${TMPD}/mcp_sdk.txt" 2>/dev/null ||
 } > "${TMPD}/mcp_procs.txt"
 
 # --- Stage-10 task board artifacts --------------------------------------------------------
-REPO_ROOT_GUESS="$(cd "${OUT_DIR}/../../.." 2>/dev/null && pwd || echo "")"
+REPO_ROOT_GUESS=""
+_d="$(cd "${OUT_DIR}" 2>/dev/null && pwd || echo "$(pwd)")"
+while [ "${_d}" != "/" ]; do
+  if [ -f "${_d}/.env.example" ] || [ -d "${_d}/.git" ]; then REPO_ROOT_GUESS="${_d}"; break; fi
+  _d="$(dirname "${_d}")"
+done
 {
   for base in "${REPO_ROOT_GUESS}" "$(pwd)" "$(pwd)/../.."; do
     [ -n "${base}" ] || continue

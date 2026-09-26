@@ -54,10 +54,18 @@ print('receipt:', '${RECEIPT}')
 "
   exit 3
 fi
-set -a
-# shellcheck disable=SC1091
-source "${REPO_ROOT}/.env"
-set +a
+# Guarded hydration: .env fills UNSET variables only; caller-exported env
+# always wins (never clobber `CF_API_TOKEN=x ./bootstrap.sh` with empty lines).
+while IFS= read -r envline || [ -n "${envline}" ]; do
+  case "${envline}" in ''|'#'*) continue ;; esac
+  envline="${envline#export }"
+  envkey="${envline%%=*}"
+  case "${envkey}" in *[!A-Za-z0-9_]*|'') continue ;; esac
+  if [ -z "${!envkey+set}" ]; then
+    eval "export ${envline}" 2>/dev/null || echo "[hydration] WARN: unparseable .env line for ${envkey}"
+  fi
+done < "${REPO_ROOT}/.env"
+echo "[hydration] .env merged (caller-exported values take precedence)"
 for var in CF_API_TOKEN CF_ACCOUNT_ID GITHUB_TOKEN NEXO_VAULT_KEY WARP_PRIVATE_KEY LITELLM_MASTER_KEY; do
   if [ -n "${!var:-}" ]; then echo "[hydration] ${var}: SET (fingerprint only, never echoed)"; else echo "[hydration] ${var}: empty -> dependent stages will record 'skipped'"; fi
 done
@@ -203,4 +211,7 @@ result='${FINAL}' if not failed else 'completed-with-failures'
 json.dump({'bootstrap':'acidwurx-nexus','ts':'${TS}','result':result,'stages':rows},open('${RECEIPT}','w'),indent=2)
 print('receipt:', '${RECEIPT}')
 "
+if [ -x "${SCRIPT_DIR}/notify.sh" ]; then
+  bash "${SCRIPT_DIR}/notify.sh" "nexo bootstrap" "result=$(python3 -c "import json;print(json.load(open('${RECEIPT}'))['result'])" 2>/dev/null || echo unknown)" 3 "rocket" || true
+fi
 echo "[bootstrap] done — result recorded in receipt (verification-honest: failures are never masked)"

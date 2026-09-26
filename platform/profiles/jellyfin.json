@@ -1,0 +1,25 @@
+{
+  "id": "jellyfin",
+  "name": "Jellyfin media server",
+  "description": "Media streaming (archive tunnel plan :8096). Mesh-only by default; set tunnel_hostname to expose via CF Access.",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "jellyfin": {
+      "image": "docker.io/jellyfin/jellyfin:latest",
+      "host_port": 8096,
+      "container_port": 8096,
+      "mem_limit_mb": 1024,
+      "cpus": 2.0,
+      "env_names": [],
+      "volumes": {"jellyfin-config": "/config", "jellyfin-cache": "/cache"},
+      "health_path": "/health",
+      "restart": "unless-stopped"
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "jellyfin.gui",
+  "backup_paths": ["/opt/nexo/jellyfin/jellyfin-config"],
+  "tags": ["media"]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "n8n",
+  "name": "n8n workflow automation",
+  "description": "Low-code automation hub (archive service catalog port 5678). Mesh-only exposure; tunnel optional via hostname field.",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "n8n": {
+      "image": "docker.io/n8nio/n8n:latest",
+      "host_port": 5678,
+      "container_port": 5678,
+      "mem_limit_mb": 512,
+      "cpus": 1.0,
+      "env_names": ["N8N_ENCRYPTION_KEY"],
+      "volumes": {"n8n-data": "/home/node/.n8n"},
+      "health_path": "/healthz",
+      "restart": "unless-stopped"
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "n8n.gui",
+  "backup_paths": ["/opt/nexo/n8n/n8n-data"],
+  "tags": ["automation", "webhooks", "iot-glue"]
+}

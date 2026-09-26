@@ -1,0 +1,25 @@
+{
+  "id": "uptime-kuma",
+  "name": "Uptime Kuma monitoring",
+  "description": "Health/uptime monitoring for every fleet service (port 3002 — 3001 is AdGuard admin). Feeds the status board; alert via n8n webhook.",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "uptime-kuma": {
+      "image": "docker.io/louislam/uptime-kuma:1",
+      "host_port": 3002,
+      "container_port": 3002,
+      "mem_limit_mb": 256,
+      "cpus": 0.5,
+      "env_names": [],
+      "volumes": {"kuma-data": "/app/data"},
+      "health_path": "/metrics",
+      "restart": "unless-stopped"
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "kuma.gui",
+  "backup_paths": ["/opt/nexo/uptime-kuma/kuma-data"],
+  "tags": ["monitoring", "alerting"]
+}

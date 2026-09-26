@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "description": "Declarative remediation routes. Every fact type emitted by probes 01-12 maps to at least one rule; unmatched facts fall through to R-UNKNOWN (task dispatch) and are counted so coverage is measurable, never assumed.",
+  "risk_classes": {
+    "auto-safe": "no sudo, no remote mutation, idempotent — executable by remediate.sh with APPLY=1",
+    "gated": "sudo/remote/edge mutation — execute via bootstrap APPLY=1, CI approval gate, or manually with the printed steps",
+    "human": "decision required — task board row with the full route written out"
+  },
+  "rules": [
+    {"id": "R-ENV-PERMS", "when": {"type": "secret_hygiene_fail", "ctx_id": "env_file"}, "severity": "high", "risk": "auto-safe",
+     "title": "Lock .env permissions to 0600", "target": "local",
+     "steps": ["if [ -f \"$REPO/.env\" ]; then chmod 600 \"$REPO/.env\"; echo '.env locked 0600'; else echo '.env absent — nothing to lock'; fi"],
+     "verify": ""},
+
+    {"id": "R-AGE-PERMS", "when": {"type": "secret_hygiene_fail", "ctx_id": "age_key"}, "severity": "high", "risk": "auto-safe",
+     "title": "Lock age keys.txt permissions to 0600", "target": "local",
+     "steps": ["if [ -f \"$HOME/.config/nexo/age/keys.txt\" ]; then chmod 600 \"$HOME/.config/nexo/age/keys.txt\"; echo 'keys.txt locked 0600'; else echo 'no keys.txt on this host'; fi"], "verify": ""},
+
+    {"id": "R-GIT-REMOTE-TOKEN", "when": {"type": "secret_hygiene_fail", "ctx_id": "git_remotes_token_free"}, "severity": "critical", "risk": "auto-safe",
+     "title": "Strip embedded credentials from git remote URLs (push -u token leak)", "target": "local",
+     "steps": ["if git -C \"$REPO\" remote get-url origin 2>/dev/null | grep -q '://[^/ ]*:[^@ ]*@'; then git -C \"$REPO\" remote set-url origin \"https://github.com/ajdhoward/acidwurx-nexus.git\" && echo 'origin reset to clean URL'; else echo 'origin already clean or absent'; fi",
+                "if grep -q x-access-token \"$REPO/.git/config\" 2>/dev/null; then echo 'WARNING: token still in .git/config — inspect manually'; else echo '.git/config clean'; fi"],
+     "verify": ""},
+
+    {"id": "R-SSH-ALIASES", "when": {"type": "always", "once": true}, "severity": "low", "risk": "auto-safe",
+     "title": "Install fleet SSH host aliases (fixes 'Could not resolve hostname jessicafletcher')", "target": "local",
+     "steps": ["mkdir -p \"$HOME/.ssh\" && touch \"$HOME/.ssh/config\" && chmod 600 \"$HOME/.ssh/config\"",
+                "grep -q 'nexo-fleet-aliases' \"$HOME/.ssh/config\" || printf '\\n# nexo-fleet-aliases (managed block — do not edit inside)\\nHost markslone\\n  HostName 192.168.1.179\\nHost jessicafletcher\\n  HostName 192.168.1.138\\nHost barryslone\\n  HostName 192.168.1.186\\nHost tanyacheex\\n  HostName 192.168.1.164\\nHost sharon\\n  HostName 192.168.1.1\\n  User root\\n# nexo-fleet-aliases-end\\n' >> \"$HOME/.ssh/config\""],
+     "verify": "grep -q nexo-fleet-aliases \"$HOME/.ssh/config\""},
+
+    {"id": "R-HISTORY-TOKENS", "when": {"type": "secret_hygiene_fail", "ctx_id": "history_token_hits"}, "severity": "critical", "risk": "gated",
+     "title": "Scrub token-shaped strings from shell history + rotate the exposed credentials", "target": "{node}",
+     "steps": ["sed -i.bak -E 's/(ghp_|cfut_|cfat_|sk-or-v1-|AGE-SECRET-KEY-1)[A-Za-z0-9_+\\/=-]{10,}/\\1[REDACTED]/g' \"$HOME/.bash_history\" \"$HOME/.zsh_history\" 2>/dev/null || true",
+                "echo 'Then rotate every credential that ever touched this shell (see R-ROTATION routes)'"],
+     "verify": ""},
+
+    {"id": "R-ROTATION-TODO", "when": {"type": "rotation_todo"}, "severity": "critical", "risk": "human",
+     "title": "Complete credential rotation: {item}", "target": "cloudflare+fleet",
+     "steps": ["Rotate at the provider (CF dashboard / service UI), update .env + GitHub Actions secret, then mark done: export {marker}=1 in .env"],
+     "verify": "", "notes": "Archive-leaked credential set; rotation is mandatory before production apply."},
+
+    {"id": "R-TOKEN-MISSING-CF", "when": {"type": "token_missing", "value": "CF_API_TOKEN"}, "severity": "high", "risk": "human",
+     "title": "Hydrate CF_API_TOKEN (+CF_ACCOUNT_ID/CF_ZONE_ID) in .env to enable probes 01/08 and the edge plane", "target": "local",
+     "steps": ["Create token at CF dashboard (Zero Trust + DNS + Workers edit), then: edit $REPO/.env"], "verify": ""},
+
+    {"id": "R-TOKEN-MISSING-GH", "when": {"type": "token_missing", "value": "GITHUB_TOKEN"}, "severity": "medium", "risk": "human",
+     "title": "Hydrate GITHUB_TOKEN in .env to enable probes 04/09 + push flows", "target": "local",
+     "steps": ["PAT scopes: repo + workflow (classic). gh auth token can supply it: export GITHUB_TOKEN=$(gh auth token)"], "verify": ""},
+
+    {"id": "R-SOPS-MISSING", "when": {"type": "tool_missing", "value": "sops"}, "severity": "medium", "risk": "gated",
+     "title": "Install sops (+age) for encrypted-blob workflows", "target": "{node}",
+     "steps": ["sudo apt install -y sops age   # Debian family", "sudo pacman -S --needed sops age   # Arch family"], "verify": "command -v sops"},
+
+    {"id": "R-TOOL-MISSING", "when": {"type": "tool_missing"}, "severity": "low", "risk": "gated",
+     "title": "Optional tool '{value}' absent on {node} — install when a workflow needs it", "target": "{node}",
+     "steps": ["echo 'Resolve the {value} package for this distro (some tools need vendor repos: gh -> official apt repo/AUR, bw -> Bitwarden CLI release, restic/age/tmux -> distro main)'"],
+     "verify": "", "notes": "Low severity: absence only matters when a dependent workflow runs; recorded so the fact is never silently dropped."},
+
+    {"id": "R-OLLAMA-LOOPBACK", "when": {"type": "blindspot_port", "value": 11434}, "severity": "critical", "risk": "gated",
+     "title": "Rebind Ollama to loopback (T-002; Law 5)", "target": "{node}",
+     "steps": ["sudo mkdir -p /etc/systemd/system/ollama.service.d",
+                "printf '[Service]\\nEnvironment=\"OLLAMA_HOST=127.0.0.1:11434\"\\n' | sudo tee /etc/systemd/system/ollama.service.d/loopback.conf",
+                "sudo systemctl daemon-reload && sudo systemctl restart ollama"],
+     "verify": "ss -tulpnH | awk '$5 ~ /:11434$/ {print $5}' | grep -q '^127.0.0.1' "},
+
+    {"id": "R-XRDP-CLOSE", "when": {"type": "blindspot_port", "value": 3389}, "severity": "high", "risk": "gated",
+     "title": "Disable or mesh-restrict xrdp (T-003)", "target": "{node}",
+     "steps": ["sudo systemctl disable --now xrdp xrdp-sesman 2>/dev/null || true"], "verify": "! ss -tulpnH | grep -q ':3389'"},
+
+    {"id": "R-RPCBIND-MASK", "when": {"type": "blindspot_port", "value": 111}, "severity": "medium", "risk": "gated",
+     "title": "Mask rpcbind unless NFS is required", "target": "{node}",
+     "steps": ["sudo systemctl mask --now rpcbind.socket rpcbind.service 2>/dev/null || true"], "verify": ""},
+
+    {"id": "R-9090-BIND", "when": {"type": "blindspot_port", "value": 9090}, "severity": "medium", "risk": "gated",
+     "title": "Bind :9090 service (cockpit/prometheus-class) to loopback or mesh-only", "target": "{node}",
+     "steps": ["echo 'Identify owner: ss -tulpnH | grep :9090 — then set its listen address to 127.0.0.1 or the mesh IP'"], "verify": ""},
+
+    {"id": "R-PLEX-GATE", "when": {"type": "blindspot_port", "value": 3240}, "severity": "low", "risk": "human",
+     "title": "Decide Plex exposure: disable remote/DLNA or move behind tunnel+Access", "target": "{node}",
+     "steps": ["Plex Settings > Network: disable remote access; or retire Plex in favour of the jellyfin catalog profile"], "verify": ""},
+
+    {"id": "R-THERMAL-HIGH", "when": {"type": "thermal_high"}, "severity": "high", "risk": "human",
+     "title": "Thermal ceiling exceeded ({value}C) — airflow/dust/paste check before sustained inference", "target": "{node}",
+     "steps": ["Physical inspection; re-test under load: watch -n5 'cat /sys/class/thermal/thermal_zone*/temp'"], "verify": ""},
+
+    {"id": "R-DHCP-DRIFT", "when": {"type": "dhcp_drift"}, "severity": "high", "risk": "gated",
+     "title": "Pin static DHCP lease for jessicafletcher (.138) on sharon — ends the .138/.139 drift", "target": "sharon",
+     "steps": ["ssh root@192.168.1.1 \"uci add_list dhcp.lan.static_lease='AA:BB:CC:DD:EE:FF,192.168.1.138' # substitute real MAC from probe 07 leases; uci commit dhcp; /etc/init.d/dnsmasq restart\""],
+     "verify": "arp -an | grep '192.168.1.138'", "notes": "MAC is captured by probe 07 leases — substitute before running."},
+
+    {"id": "R-WARP-OFF-GW", "when": {"type": "warp_off_gateway"}, "severity": "critical", "risk": "gated",
+     "title": "Gateway WARP down — restart wgcf + policy routing on markslone", "target": "markslone",
+     "steps": ["ssh markslone 'sudo wg-quick down wgcf 2>/dev/null; sudo wg-quick up wgcf; sudo /usr/local/bin/acidwurx-setup-routing.sh'",
+                "ssh markslone \"curl -4 -s --interface wgcf https://1.1.1.1/cdn-cgi/trace | grep -E 'ip=|warp='\""],
+     "verify": "", "notes": "If handshake fails: rotate endpoints 162.159.193.1:2408 <-> 162.159.192.1:2408; check ISP UDP-2408 block."},
+
+    {"id": "R-WARP-OFF-CLIENT", "when": {"type": "warp_off_client"}, "severity": "info", "risk": "human",
+     "title": "Client egress is direct-ISP (warp=off) — expected until Stage 9 applies the gateway play (DHCP option-3 redirect + wgcf)", "target": "{node}",
+     "steps": ["Pre-apply: no action. Post-apply: verify sharon uci dhcp_option contains 3,192.168.1.179 and lease renewed (30m window)."], "verify": ""},
+
+    {"id": "R-ROUTING-MISSING", "when": {"type": "routing_missing"}, "severity": "critical", "risk": "gated",
+     "title": "Policy-routing rules absent on gateway — re-apply the routing manager", "target": "markslone",
+     "steps": ["ssh markslone 'sudo /usr/local/bin/acidwurx-setup-routing.sh && ip rule show | head -8'"], "verify": ""},
+
+    {"id": "R-NODE-UNREACHABLE", "when": {"type": "host_unreachable"}, "severity": "high", "risk": "gated",
+     "title": "Fleet node {name} unreachable — WoL wake then re-probe", "target": "{name}",
+     "steps": ["curl -s -X POST http://192.168.1.179:9000/wake -H 'Content-Type: application/json' -d '{\"mac\":\"<MAC from probe 07 leases>\"}'",
+                "sleep 45 && ping -c2 {ip}"],
+     "verify": "", "notes": "If WoL relay is not yet deployed (Stage 9), this route is physical-power-only."},
+
+    {"id": "R-FAILED-UNITS", "when": {"type": "failed_units"}, "severity": "high", "risk": "gated",
+     "title": "{count} failed systemd unit(s) on {node}: {list}", "target": "{node}",
+     "steps": ["ssh {node} 'systemctl --failed; systemctl status <unit> -l --no-pager | head -20'"], "verify": ""},
+
+    {"id": "R-ISOLCPU-INACTIVE", "when": {"type": "isolcpus_inactive"}, "severity": "high", "risk": "gated",
+     "title": "isolcpus not active on compute node — re-run compute play + schedule reboot", "target": "jessicafletcher",
+     "steps": ["cd $REPO/infra/ansible && ansible-playbook -i inventory.ini playbook.yml --limit compute",
+                "sudo reboot   # isolation only takes effect on boot"],
+     "verify": "grep -o 'isolcpus=[^ ]*' /proc/cmdline"},
+
+    {"id": "R-HUGEPAGES-LOW", "when": {"type": "hugepages_low"}, "severity": "medium", "risk": "gated",
+     "title": "Hugepages below 512 on {node} — apply live (Law 3 floor)", "target": "{node}",
+     "steps": ["ssh {node} 'sudo sysctl -w vm.nr_hugepages=512'"], "verify": ""},
+
+    {"id": "R-DISK-PRESSURE", "when": {"type": "disk_pressure"}, "severity": "high", "risk": "human",
+     "title": "Disk {mount} at {value} on {node} — reclaim or expand", "target": "{node}",
+     "steps": ["du -xh --max-depth=2 / | sort -h | tail -15", "journalctl --vacuum-size=100M", "docker system prune -f / podman system prune -f (host-appropriate)"], "verify": ""},
+
+    {"id": "R-NOATIME-MISSING", "when": {"type": "noatime_missing"}, "severity": "low", "risk": "human",
+     "title": "{count} data mount(s) without noatime — fstab edit + remount", "target": "{node}",
+     "steps": ["Edit /etc/fstab options for the flagged mounts, then: sudo mount -o remount <target>"], "verify": ""},
+
+    {"id": "R-SMART-FAIL", "when": {"type": "smart_fail"}, "severity": "critical", "risk": "human",
+     "title": "SMART health FAILED on {device} ({node}) — back up NOW, plan replacement", "target": "{node}",
+     "steps": ["./nexo.sh backup (fleet configs) + restic full run against the affected data", "smartctl -a {device} for the failure attributes"], "verify": ""},
+
+    {"id": "R-RESTIC-UNCONFIGURED", "when": {"type": "restic_unconfigured"}, "severity": "medium", "risk": "gated",
+     "title": "Restic repository not configured — initialize the backup target", "target": "barryslone",
+     "steps": ["Set RESTIC_REPOSITORY + RESTIC_PASSWORD_FILE in .env, then: restic init && ./nexo.sh backup"], "verify": "restic snapshots"},
+
+    {"id": "R-NAS-UNREACHABLE", "when": {"type": "nas_unreachable"}, "severity": "medium", "risk": "gated",
+     "title": "barryslone unreachable — check WoL persistence unit / spin-down window", "target": "barryslone",
+     "steps": ["ping -c2 192.168.1.186 || echo 'hdparm 15-min spin-down may need WoL first; wake via relay'"], "verify": ""},
+
+    {"id": "R-DNS-VIOLATION", "when": {"type": "dns_violation"}, "severity": "critical", "risk": "gated",
+     "title": "{count} DNS record(s) expose private/CGNAT space (Law 5) — review then delete", "target": "cloudflare",
+     "steps": ["List from probe 08 data.dns_violations, confirm none are intentional, then delete via dashboard or API PATCH/DELETE"], "verify": "re-run probe 08: dns_violation_count == 0"},
+
+    {"id": "R-GW-DUPES", "when": {"type": "gateway_dupes"}, "severity": "medium", "risk": "human",
+     "title": "Duplicate AI gateways {value} — consolidate onto 'acidwurx' (one billable entrypoint)", "target": "cloudflare",
+     "steps": ["Move consumers to https://gateway.ai.cloudflare.com/v1/$CF_ACCOUNT_ID/acidwurx/compat, verify logs, then delete {value} in dashboard"], "verify": ""},
+
+    {"id": "R-WORKER-BURN", "when": {"type": "worker_burn"}, "severity": "medium", "risk": "human",
+     "title": "{count} workers on the account — inventory & cull against the £5 cap", "target": "cloudflare",
+     "steps": ["probe 08 workers_detail is the inventory; delete dead scripts via wrangler delete <name> after confirming no routes reference them"], "verify": ""},
+
+    {"id": "R-TUNNEL-ROUTE-MISSING", "when": {"type": "tunnel_route_missing"}, "severity": "high", "risk": "gated",
+     "title": "Private route 192.168.1.0/24 not advertised through the tunnel — run the edge apply", "target": "cloudflare",
+     "steps": ["Approve the production-bare-metal gate on the iac-cd run (pulumi up creates ZeroTrustTunnelRoute), or locally: cd infra/pulumi && pulumi up"], "verify": "probe 08 account_flags.tunnel_private_routes contains 192.168.1.0/24"},
+
+    {"id": "R-GOV-ENV-MISSING", "when": {"type": "gov_gap", "contains": "production-bare-metal"}, "severity": "critical", "risk": "human",
+     "title": "Stage-7 approval environment missing — create production-bare-metal with required reviewer BEFORE secrets", "target": "github",
+     "steps": ["Repo Settings > Environments > New environment: production-bare-metal > Required reviewers: ajdhoward"], "verify": "probe 09: approval_gate_present true"},
+
+    {"id": "R-GOV-BRANCH-UNPROTECTED", "when": {"type": "gov_gap", "contains": "unprotected"}, "severity": "medium", "risk": "human",
+     "title": "main branch unprotected — enable after first green run (PR + status checks + signed commits)", "target": "github",
+     "steps": ["Repo Settings > Branches > Add rule for main"], "verify": ""},
+
+    {"id": "R-GOV-SECRET-MISSING", "when": {"type": "gov_gap", "contains": "actions secret missing"}, "severity": "high", "risk": "human",
+     "title": "{gap}", "target": "github",
+     "steps": ["Repo Settings > Secrets > Actions > New repository secret (value per .env / rotation runbook)"], "verify": "probe 09 missing_secrets empty"},
+
+    {"id": "R-ADGUARD-RECORDS", "when": {"type": "always", "once": true}, "severity": "medium", "risk": "gated",
+     "title": "Add fleet A-records to AdGuard Home so hostnames resolve LAN-wide (ssh jessicafletcher NXDOMAIN fix)", "target": "markslone",
+     "steps": ["AdGuard Home UI > Filters > DNS rewrites (or custom rules): markslone->192.168.1.179, jessicafletcher->192.168.1.138, barryslone->192.168.1.186, tanyacheex->192.168.1.164, sharon->192.168.1.1",
+                "Verify from any node: getent hosts jessicafletcher"],
+     "verify": ""},
+
+    {"id": "R-ESP-STAGING", "when": {"type": "esp_target"}, "severity": "low", "risk": "human",
+     "title": "Espressif device {ip} ({mac}) — stage for ESPHome/OpenWrt firmware workflow", "target": "iot",
+     "steps": ["./nexo.sh launch deploy esphome (workbench on markslone:6052)", "Adopt device in ESPHome dashboard; keep OTA on mesh-only VLAN if created"], "verify": ""},
+
+    {"id": "R-OLLAMA-CTX-LOW", "when": {"type": "ollama_ctx_low"}, "severity": "medium", "risk": "gated",
+     "title": "Ollama profile context below 8192 — raise num_ctx for qwen2.5-coder:7b", "target": "{node}",
+     "steps": ["ollama run qwen2.5-coder:7b --num-ctx 8192 (or set in Modelfile PARAMETER num_ctx 8192)"], "verify": "probe 05 context_bounds_ok true"},
+
+    {"id": "R-MCP-SERVER-ABSENT", "when": {"type": "mcp_server_missing"}, "severity": "low", "risk": "auto-safe",
+     "title": "Stage-10 task server not wired into agent clients — print the config snippet", "target": "local",
+     "steps": ["sed -n '1,40p' \"$REPO/docs/MCP_TASKS.md\""], "verify": ""}
+  ],
+  "fallback": {"id": "R-UNKNOWN", "risk": "human", "severity": "medium",
+    "title": "Unrouted finding: {type}={value} on {node} — triage and extend rules.json",
+    "steps": ["Inspect the source probe JSON in the run directory, then add a rule to tools/remediation/rules.json so this outcome is covered next wave (target: >=95% routed)."]}
+}

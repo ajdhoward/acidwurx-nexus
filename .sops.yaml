@@ -1,12 +1,20 @@
-# sops configuration — age recipient pinned to this repository's vault key.
+# sops configuration — repo owner + approved AI agents.
+# Owner recipient: pinned by generate_nexus_engine.py at scaffold time; matches
+#   ~/.config/nexo/age/keys.txt (0600, OUTSIDE this repo).
+# Agent recipients: appended ONLY by .github/workflows/access-approval.yml
+#   after the owner labels an access-request issue 'approved'
+#   (procedure: docs/ACCESS_APPLICATION.md). Comma-separated inside the quotes.
+# After recipient changes, re-wrap existing blobs: sops updatekeys <file>
 # Encrypt:  sops --encrypt --in-place secrets/<file>.yaml
 # Decrypt:  SOPS_AGE_KEY_FILE=~/.config/nexo/age/keys.txt sops --decrypt <file>
-# The public key below is generated/derived by generate_nexus_engine.py at
-# scaffold time and matches the private key stored OUTSIDE this repository.
 creation_rules:
   - path_regex: secrets/.*\.ya?ml$
     age: "age1w5vshjjv9nqu79wnada4hft2m3lsp05p9zck00eplllwmwlk530qanmk5m"
   - path_regex: secrets/.*\.json$
     age: "age1w5vshjjv9nqu79wnada4hft2m3lsp05p9zck00eplllwmwlk530qanmk5m"
   - path_regex: infra/ansible/group_vars/.*\.enc\.yml$
+    age: "age1w5vshjjv9nqu79wnada4hft2m3lsp05p9zck00eplllwmwlk530qanmk5m"
+  - path_regex: .*\.enc\.ya?ml$
+    age: "age1w5vshjjv9nqu79wnada4hft2m3lsp05p9zck00eplllwmwlk530qanmk5m"
+  - path_regex: .*\.enc\.json$
     age: "age1w5vshjjv9nqu79wnada4hft2m3lsp05p9zck00eplllwmwlk530qanmk5m"

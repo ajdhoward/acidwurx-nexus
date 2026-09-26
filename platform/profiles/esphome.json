@@ -1,0 +1,25 @@
+{
+  "id": "esphome",
+  "name": "ESPHome firmware workbench",
+  "description": "Custom firmware staging for the ESP8266/ESP32 targets flagged by probe 02's OUI sweep (Espressif MACs). Port 6052. Compiles OTA images; flash from the LAN.",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "esphome": {
+      "image": "docker.io/esphome/esphome:latest",
+      "host_port": 6052,
+      "container_port": 6052,
+      "mem_limit_mb": 512,
+      "cpus": 2.0,
+      "env_names": [],
+      "volumes": {"esphome-config": "/config"},
+      "health_path": "/",
+      "restart": "unless-stopped"
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "esphome.gui",
+  "backup_paths": ["/opt/nexo/esphome/esphome-config"],
+  "tags": ["firmware", "iot", "esphome"]
+}

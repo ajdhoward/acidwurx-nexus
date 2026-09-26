@@ -95,11 +95,30 @@ infra/cloudflare/     config.yml (cloudflared ingress), worker.js (edge router +
                       d1/schema.sql (z.ai handoff tables)
 infra/netbootxyz/     docker-compose.yml, custom-menu.ipxe, openwrt-uci.md
 docs/interop/         ZAI_HANDOFF_SCHEMA.md (webhook/HMAC/D1 contract for z.ai peer)
-scripts/wave1_discovery/  00_master_orchestrator.sh + probes 01-05 (read-only)
+scripts/wave1_discovery/  00_master_orchestrator.sh + probes 01-12 (read-only,
+                      parallel: edge, LAN/IoT, hardware, GitHub, AI/MCP, fleet SSH
+                      inventory, router capture, cloud imaging, GH governance,
+                      storage, service matrix, secrets posture)
 scripts/wave2_deployment/ bootstrap.sh, validation_trace.sh, wol_listener.py,
-                      deploy_budget_sentinel.sh, create_ai_gateway.sh
+                      deploy_budget_sentinel.sh, create_ai_gateway.sh,
+                      deploy_telemetry_ingest.sh, fleet_backup.sh
+scripts/wave3_bulk/   fleet_apply.sh (canary-disciplined bulk ansible)
 scripts/ci/           validate_repo.py (standalone re-run of the engine harness)
-tools/                (reserved for generated artifacts)
+platform/             SERVICE FACTORY: launch.py + hosts.json + profiles/*.json
+                      (n8n, jellyfin, uptime-kuma, netbox, semaphore, esphome,
+                      _template) -> rendered compose + budget/law-gated deploy
+tools/mcp/            nexo_tasks_server.py — pure-stdlib MCP task server (Stage 10)
+tools/telemetry/      pack.py — classify/redact/encrypt wave runs for the secure
+                      telemetry area (telemetry/PUSH_MANIFEST.json is the law)
+tools/access/         request_access.py — AI-agent keygen + access-request issue
+tools/remediation/    rules.json (36 routes, risk-classified) + engine.py —
+                      facts -> plan -> auto-safe executor -> task board rows
+.github/workflows/    + access-approval.yml (label-driven grant/deny -> .sops.yaml)
+docs/                 + ACCESS_APPLICATION.md (agent application procedure)
+nexo.sh               unified CLI: wave1 | validate | launch | status | backup |
+                      tasks | mcp | trace | report | push | remediate | facts |
+                      matrix | coverage | fleet-apply | public-audit | cron |
+                      notify | access-request
 ```
 
 ## Governance

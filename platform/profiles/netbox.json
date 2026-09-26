@@ -1,0 +1,39 @@
+{
+  "id": "netbox",
+  "name": "NetBox DCIM/IPAM",
+  "description": "Fleet inventory, IPAM and rack/DCIM truth-store (archive discovery provider #2). Multi-container: netbox + postgres. Seed from probe 02 output.",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "netbox-db": {
+      "image": "docker.io/postgres:16-alpine",
+      "host_port": null,
+      "container_port": 5432,
+      "mem_limit_mb": 256,
+      "cpus": 0.5,
+      "env_names": ["NETBOX_DB_PASSWORD"],
+      "env_static": {"POSTGRES_DB": "netbox", "POSTGRES_USER": "netbox"},
+      "volumes": {"netbox-pgdata": "/var/lib/postgresql/data"},
+      "health_path": null,
+      "restart": "unless-stopped"
+    },
+    "netbox": {
+      "image": "docker.io/netboxcommunity/netbox:latest",
+      "host_port": 8071,
+      "container_port": 8080,
+      "mem_limit_mb": 768,
+      "cpus": 1.0,
+      "env_names": ["NETBOX_DB_PASSWORD", "NETBOX_SECRET_KEY", "NETBOX_SUPERUSER_PASSWORD"],
+      "env_static": {"DB_HOST": "netbox-db", "DB_NAME": "netbox", "DB_USER": "netbox", "SKIP_SUPERUSER": "false", "NETBOX_SUPERUSER_NAME": "admin"},
+      "volumes": {"netbox-media": "/opt/netbox/netbox/media"},
+      "health_path": "/",
+      "restart": "unless-stopped",
+      "depends_on": ["netbox-db"]
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "netbox.gui",
+  "backup_paths": ["/opt/nexo/netbox/netbox-media", "/opt/nexo/netbox/netbox-pgdata"],
+  "tags": ["inventory", "ipam", "dcim"]
+}

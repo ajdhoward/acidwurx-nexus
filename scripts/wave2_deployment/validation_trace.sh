@@ -22,6 +22,9 @@ if [ -n "${TRACE_OUT}" ]; then
   OUT_IP="$(printf '%s\n' "${TRACE_OUT}" | awk -F= '/^ip=/{print $2}')"
   WARP_STATE="$(printf '%s\n' "${TRACE_OUT}" | awk -F= '/^warp=/{print $2}')"
   echo "  outbound_ip=${OUT_IP:-unknown} warp=${WARP_STATE:-unknown}"
+  if [ "${WARP_STATE:-}" != "on" ]; then
+    echo "  NOTE: warp=off — this host is egressing direct-ISP. Expected before the gateway play is applied (DHCP option-3 redirect to markslone + wgcf). On markslone itself, warp=off means WARP is DOWN: check wg-quick@wgcf and the policy-routing rules."
+  fi
   if [ -n "${ISP_CGNAT_IP:-}" ] && [ "${OUT_IP:-}" = "${ISP_CGNAT_IP}" ]; then
     note_fail "outbound IP equals ISP CGNAT canary (${ISP_CGNAT_IP}) — WARP breakout down (expected ON the gateway host)"
   else

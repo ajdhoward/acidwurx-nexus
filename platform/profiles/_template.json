@@ -1,0 +1,26 @@
+{
+  "id": "_template",
+  "name": "TEMPLATE — copy to platform/profiles/<your-service>.json and edit",
+  "description": "Profiles starting with '_' are ignored by the launcher. Fields: target_group (gateway|compute|legacy — legacy/compute refuse docker per Law 1/3), services{} (image, host_port=null for internal-only, container_port, mem_limit_mb, cpus, env_names = secret names pulled from .env at deploy time — NEVER literal values, env_static for non-secrets, volumes {name: container_path}, health_path, restart, depends_on), exposure (mesh|tunnel|loopback), tunnel_hostname (CF Access-gated when exposure=tunnel), dns_gui_name (AdGuard *.gui rewrite), backup_paths (fleet_backup.sh targets), tags.",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "example": {
+      "image": "docker.io/example/image:tag",
+      "host_port": 9999,
+      "container_port": 80,
+      "mem_limit_mb": 128,
+      "cpus": 0.5,
+      "env_names": ["EXAMPLE_SECRET"],
+      "env_static": {"EXAMPLE_MODE": "production"},
+      "volumes": {"example-data": "/data"},
+      "health_path": "/",
+      "restart": "unless-stopped"
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "example.gui",
+  "backup_paths": ["/opt/nexo/example/example-data"],
+  "tags": ["template"]
+}

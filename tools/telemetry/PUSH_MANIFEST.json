@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "description": "Classification rules for the secure telemetry area. Every wave-run artifact is routed by class; nothing is pushed that is not listed here (default-deny).",
+  "classes": {
+    "index": {
+      "patterns": ["INDEX.json"],
+      "treatment": "plaintext",
+      "rationale": "Metadata only: run id, node, timestamps, probe statuses, sha256 fingerprints, flag list. No IPs beyond fleet-known, no secrets."
+    },
+    "briefing": {
+      "patterns": ["BRIEFING.md"],
+      "treatment": "plaintext-redacted",
+      "rationale": "AI-ingestible briefing; pack.py scrubs anything matching secret shapes (tokens, keys, long hex/base64) to sha256:16 fingerprints before it leaves the host."
+    },
+    "raw": {
+      "patterns": ["*_result.json", "results.json", "routers/*", "nodes/*.raw"],
+      "treatment": "encrypted",
+      "rationale": "Full probe payloads (sockets, MACs, repo inventories, router UCI exports incl. wireless PSKs, node raw facts) — age/sops/openssl encrypted before push. Fail-closed: no backend => class skipped, recorded in receipt."
+    },
+    "receipts": {
+      "patterns": ["push_receipt.json", "probe_exit_codes.txt", "bootstrap-receipt-*.json", "aggregate.py"],
+      "treatment": "metadata",
+      "rationale": "Hashes + exit codes go into INDEX.json; files themselves stay local."
+    },
+    "logs": {
+      "patterns": ["*.log"],
+      "treatment": "local-only",
+      "rationale": "Verbose probe logs never leave the fleet."
+    }
+  },
+  "flags_to_labels": {
+    "blindspots-found": "telemetry-blindspots",
+    "drift-detected": "telemetry-drift",
+    "degraded-probe": "telemetry-degraded",
+    "dns-violation": "telemetry-dns-violation"
+  },
+  "base_labels": ["telemetry", "wave1"]
+}

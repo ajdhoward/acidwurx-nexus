@@ -1,0 +1,26 @@
+{
+  "id": "home-assistant",
+  "name": "Home Assistant (container refresh)",
+  "description": "Archive catalog port 8123. Deploy ONLY if the existing HA instance is being migrated onto markslone; otherwise the matrix probe records the incumbent and this profile stays unrendered. host network mode for mDNS/device discovery — but mesh-containment nftables still drops 5353/1900 toward the WARP fabric (discovery stays LAN-local).",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "homeassistant": {
+      "image": "docker.io/homeassistant/home-assistant:stable",
+      "host_port": 8123,
+      "container_port": 8123,
+      "mem_limit_mb": 1024,
+      "cpus": 2.0,
+      "env_names": [],
+      "env_static": {"TZ": "Europe/London"},
+      "volumes": {"ha-config": "/config"},
+      "health_path": "/",
+      "restart": "unless-stopped"
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "ha.gui",
+  "backup_paths": ["/opt/nexo/home-assistant/ha-config"],
+  "tags": ["iot", "home-automation", "mqtt-client"]
+}

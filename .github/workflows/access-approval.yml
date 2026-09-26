@@ -1,0 +1,92 @@
+# =============================================================================
+# access-approval.yml — label-driven adjudication of AI agent access requests.
+# Trigger: an 'access-request' issue receives label 'approved' or 'denied'.
+# Owner notification path: issue creation + label events notify via GitHub
+# (desktop + mobile app) — this IS the PC/phone approval prompt.
+# On 'approved': extract age1... from body -> validate -> append to .sops.yaml
+# recipients (all creation rules) -> commit -> comment receipt -> label
+# 'access-granted'. On 'denied': comment + close. Never touches secret keys.
+# =============================================================================
+name: "Access Request Adjudication"
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  adjudicate:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'access-request') &&
+      (github.event.label.name == 'approved' || github.event.label.name == 'denied')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract and validate applicant public key
+        id: extract
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, sys
+          body = os.environ.get("BODY", "")
+          keys = re.findall(r"age1[02-9ac-z]{58}", body)
+          if not keys:
+              sys.stderr.write("FATAL: no valid age1 public key found in issue body\n")
+              sys.exit(1)
+          if len(set(keys)) > 1:
+              sys.stderr.write("FATAL: multiple distinct keys in body — ambiguous request\n")
+              sys.exit(1)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write("pubkey=%s\n" % keys[0])
+          print("extracted:", keys[0])
+          PY
+
+      - name: Approve — append recipient, commit, label
+        if: github.event.label.name == 'approved'
+        env:
+          PUBKEY: ${{ steps.extract.outputs.pubkey }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, sys
+          key = os.environ["PUBKEY"]
+          path = ".sops.yaml"
+          text = open(path).read()
+          if key in text:
+              print("recipient already present — idempotent no-op")
+              sys.exit(0)
+          updated, n = re.subn(r'(age: "[^"]*)(")', lambda m: m.group(1) + "," + key + m.group(2), text)
+          if n == 0:
+              sys.stderr.write("FATAL: no age: recipient line found in .sops.yaml\n")
+              sys.exit(1)
+          open(path, "w").write(updated)
+          print("appended recipient to %d creation rule(s)" % n)
+          PY
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add .sops.yaml
+          if ! git diff --staged --quiet; then
+            git commit -m "security(access): grant decryption to approved agent key ${PUBKEY:0:16}... (issue #${ISSUE}) [skip ci]"
+            git push
+          fi
+          gh issue comment "${ISSUE}" --body "Access GRANTED. Public key ${PUBKEY} added to .sops.yaml recipients (commit: $(git rev-parse --short HEAD)). To decrypt existing bundles: the owner re-encrypts with 'sops updatekeys', or request fresh ciphertext. Revocation = remove recipient + 'sops updatekeys' + rotate if needed."
+          gh issue edit "${ISSUE}" --add-label "access-granted"
+
+      - name: Deny — comment and close
+        if: github.event.label.name == 'denied'
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          gh issue comment "${ISSUE}" --body "Access DENIED by repository owner. No recipient was added. You may re-apply with an amended purpose per docs/ACCESS_APPLICATION.md."
+          gh issue close "${ISSUE}"

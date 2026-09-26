@@ -1,0 +1,26 @@
+{
+  "id": "semaphore",
+  "name": "Ansible Semaphore UI",
+  "description": "Web UI for running the repo's Ansible playbooks with RBAC + audit (archive service catalog). Port 3010 (3000 is Open WebUI).",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "semaphore": {
+      "image": "docker.io/semaphoreui/semaphore:latest",
+      "host_port": 3010,
+      "container_port": 3000,
+      "mem_limit_mb": 384,
+      "cpus": 1.0,
+      "env_names": ["SEMAPHORE_DB_DIALECT", "SEMAPHORE_ADMIN_PASSWORD"],
+      "env_static": {"SEMAPHORE_DB_DIALECT": "bolt"},
+      "volumes": {"semaphore-data": "/etc/semaphore"},
+      "health_path": "/api/ping",
+      "restart": "unless-stopped"
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "semaphore.gui",
+  "backup_paths": ["/opt/nexo/semaphore/semaphore-data"],
+  "tags": ["ansible", "gitops-ui", "audit"]
+}

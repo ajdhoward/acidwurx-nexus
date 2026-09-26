@@ -1,0 +1,25 @@
+{
+  "id": "mosquitto",
+  "name": "Eclipse Mosquitto MQTT broker",
+  "description": "Archive catalog port 1883 — the IoT spine (ESPHome devices, HA, n8n glue). Listener on LAN only; no websockets unless a profile edit adds them. Anonymous access OFF: create the password file first (see notes).",
+  "target_group": "gateway",
+  "runtime": "docker",
+  "services": {
+    "mosquitto": {
+      "image": "docker.io/eclipse-mosquitto:2",
+      "host_port": 1883,
+      "container_port": 1883,
+      "mem_limit_mb": 128,
+      "cpus": 0.5,
+      "env_names": [],
+      "volumes": {"mosquitto-config": "/mosquitto/config", "mosquitto-data": "/mosquitto/data", "mosquitto-log": "/mosquitto/log"},
+      "health_path": null,
+      "restart": "unless-stopped"
+    }
+  },
+  "exposure": "mesh",
+  "tunnel_hostname": null,
+  "dns_gui_name": "mqtt.gui",
+  "backup_paths": ["/opt/nexo/mosquitto/mosquitto-config", "/opt/nexo/mosquitto/mosquitto-data"],
+  "tags": ["iot", "mqtt", "esphome-backbone"]
+}

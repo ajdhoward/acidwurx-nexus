@@ -36,14 +36,15 @@ wait
   cat "${SWEEP_FILE}" 2>/dev/null || true
 } | sort -u -t. -k4,4n > "${HOSTS_FILE}"
 
-# --- 3. Service-port fingerprints per live host --------------------------------
-# port:label pairs from the AcidWurx service catalog (ARCHITECTURE.md §2)
-PORT_LABELS="22:ssh 53:dns 69:tftp 80:http 443:https 554:rtsp 1883:mqtt 3000:openwebui 3001:adguard-admin 3128:proxy 4000:litellm 5353:mdns 5678:n8n 8080:http-alt 8081:searxng-plane 8096:jellyfin 8100:paperless 8123:homeassistant 8443:https-alt 9000:portainer-wol 11434:ollama 49152:upnp"
-while read -r host; do
-  [ -z "${host}" ] && continue
-  found=""
-  IFS=' ' read -r -a pairs <<< "${PORT_LABELS}"
-  for pair in "${pairs[@]}"; do
+# --- 3. Service-port fingerprints per live host (PARALLEL per host) -------------
+# port:label pairs from the AcidWurx service catalog (ARCHITECTURE.md §2);
+# override via PROBE02_PORTS="8123:homeassistant 1883:mqtt". Parallelism 32
+# keeps the worst-case sweep near one host's scan time (rc=124 field fix).
+PORT_LABELS="${PROBE02_PORTS:-22:ssh 53:dns 69:tftp 80:http 443:https 554:rtsp 1883:mqtt 3000:openwebui 3001:adguard-admin 3128:proxy 4000:litellm 5353:mdns 5678:n8n 8080:http-alt 8081:searxng-plane 8096:jellyfin 8100:paperless 8123:homeassistant 8443:https-alt 9000:portainer-wol 11434:ollama 49152:upnp}"
+scan_host() {
+  local host="$1" outfile="$2"
+  local found="" pair port label
+  for pair in ${PORT_LABELS}; do
     port="${pair%%:*}"
     label="${pair##*:}"
     if timeout 1 bash -c "echo > /dev/tcp/${host}/${port}" >/dev/null 2>&1; then
@@ -51,9 +52,24 @@ while read -r host; do
     fi
   done
   if [ -n "${found}" ]; then
-    echo "${host} ${found}" >> "${PORTS_FILE}"
+    echo "${host} ${found}" >> "${outfile}"
+  fi
+}
+JOBS=0
+HOST_N=0
+while read -r host; do
+  if [ -z "${host}" ]; then continue; fi
+  scan_host "${host}" "${PORTS_FILE}.${HOST_N}" &
+  HOST_N=$((HOST_N + 1))
+  JOBS=$((JOBS + 1))
+  if [ "${JOBS}" -ge 32 ]; then
+    wait -n 2>/dev/null || wait
+    JOBS=$((JOBS - 1))
   fi
 done < "${HOSTS_FILE}"
+wait
+cat "${PORTS_FILE}."* >> "${PORTS_FILE}" 2>/dev/null || true
+rm -f "${PORTS_FILE}."* 2>/dev/null || true
 
 # --- 4. MAC table (ip neigh preferred; arp fallback) ----------------------------
 MAC_FILE="$(mktemp)"

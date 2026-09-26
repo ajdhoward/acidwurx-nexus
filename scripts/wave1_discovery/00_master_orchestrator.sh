@@ -14,20 +14,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 OUT_DIR="${NEXO_OUT_DIR:-${REPO_ROOT}/docs/discovery/wave1/run-${RUN_ID}}"
-PROBE_TIMEOUT="${PROBE_TIMEOUT:-300}"
+PROBE_TIMEOUT="${PROBE_TIMEOUT:-600}"
 export NEXO_OUT_DIR="${OUT_DIR}"
 export NEXO_NODE_NAME="${NEXO_NODE_NAME:-$(hostname -s 2>/dev/null || hostname)}"
 
 mkdir -p "${OUT_DIR}"
 echo "[orchestrator] run ${RUN_ID} node ${NEXO_NODE_NAME} out ${OUT_DIR}"
 
-# --- Stage 1 hydration: load .env if present (zero prompts) -------------------
+# --- Stage 1 hydration: load .env if present (zero prompts; guarded — caller env wins)
 if [ -f "${REPO_ROOT}/.env" ]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "${REPO_ROOT}/.env"
-  set +a
-  echo "[orchestrator] hydrated environment from .env"
+  while IFS= read -r envline || [ -n "${envline}" ]; do
+    case "${envline}" in ''|'#'*) continue ;; esac
+    envline="${envline#export }"
+    envkey="${envline%%=*}"
+    case "${envkey}" in *[!A-Za-z0-9_]*|'') continue ;; esac
+    if [ -z "${!envkey+set}" ]; then
+      eval "export ${envline}" 2>/dev/null || echo "[orchestrator] WARN: unparseable .env line for ${envkey}"
+    fi
+  done < "${REPO_ROOT}/.env"
+  echo "[orchestrator] hydrated environment from .env (caller env takes precedence)"
 else
   echo "[orchestrator] NOTE: no .env at repo root — probes requiring tokens will report status=skipped"
 fi
@@ -66,6 +71,13 @@ PROBES=(
   "03_hw_security_blindspots.sh"
   "04_github_ai_consolidation.py"
   "05_local_ai_mcp_audit.sh"
+  "06_fleet_ssh_inventory.sh"
+  "07_router_config_capture.sh"
+  "08_cloud_deep_audit.py"
+  "09_github_deep_audit.py"
+  "10_storage_health.sh"
+  "11_services_matrix.sh"
+  "12_secrets_posture.sh"
 )
 PIDS=()
 for probe in "${PROBES[@]}"; do
@@ -120,7 +132,7 @@ for probe in results:
     status = probe.get("status", "?")
     data = probe.get("data", {}) or {}
     highlights = []
-    for key in ("zones", "tunnels", "workers", "gateways", "hosts_up", "blindspots", "repos_total", "stale_repos", "ollama_models", "mcp_configs"):
+    for key in ("zones", "tunnels", "workers", "gateways", "hosts_up", "blindspots", "repos_total", "stale_repos", "ollama_models", "mcp_configs", "nodes", "nodes_unreachable", "routers", "leases", "matrix", "checks", "governance_gaps", "records_total", "zt_devices"):
         value = data.get(key)
         if isinstance(value, list):
             highlights.append("%s=%d" % (key, len(value)))

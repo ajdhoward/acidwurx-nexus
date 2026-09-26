@@ -1,6 +1,6 @@
 # AcidWurx Nexus Repository Map
 
-_Auto-generated on 2026-09-26T19:45:06Z from commit 6135788794afad5f1787170f69efb0d67dcfcb2a._
+_Auto-generated on 2026-09-26T21:16:01Z from commit 00027eba7eac9e8905cecd465630ccba7849ddb9._
 
 ```text
 .
@@ -22,7 +22,8 @@ _Auto-generated on 2026-09-26T19:45:06Z from commit 6135788794afad5f1787170f69ef
 │   │   └── ZAI_HANDOFF_SCHEMA.md
 │   └── tasks
 │       ├── TASK_BOARD.md
-│       └── mcp_task_contract.md
+│       ├── mcp_task_contract.md
+│       └── tasks.json
 ├── infra
 │   ├── ansible
 │   │   ├── ansible.cfg

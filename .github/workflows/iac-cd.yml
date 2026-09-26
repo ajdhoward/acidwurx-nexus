@@ -30,7 +30,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
       - name: Setup Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Run engine validation harness (standalone copy)
@@ -95,7 +95,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
       - name: Setup Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install ansible-core
@@ -183,7 +183,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
       - name: Setup Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install ansible-core

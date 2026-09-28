@@ -27,7 +27,7 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=${REPO_ROOT}
 EnvironmentFile=${REPO_ROOT}/.env
-ExecStart=/bin/bash -c 'set -euo pipefail; ./nexo.sh wave1; ./nexo.sh remediate; RUN=\$(ls -1dt docs/discovery/wave1/run-* | head -1); if [ \"\${NEXO_AUTOREMEDIATE:-0}\" = \"1\" ] && [ -f \"\$RUN/remediate.sh\" ]; then APPLY=1 bash \"\$RUN/remediate.sh\"; fi; ./nexo.sh push --flag scheduled; bash scripts/wave2_deployment/notify.sh \"nexo wave\" \"scheduled wave complete on '\$(hostname)'\" 3 floppy_disk'
+ExecStart=/bin/bash -c 'set -euo pipefail; ./nexo.sh wave1; ./nexo.sh remediate; RUN=\$(ls -1dt docs/discovery/wave1/run-* | head -1); if [ \"\${NEXO_AUTOREMEDIATE:-0}\" = \"1\" ] && [ -f \"\$RUN/remediate.sh\" ]; then APPLY=1 bash \"\$RUN/remediate.sh\"; fi; ./nexo.sh push --flag scheduled; bash scripts/wave2_deployment/notify.sh \"nexo wave\" \"scheduled wave complete on '\$(uname -n)'\" 3 floppy_disk'
 TimeoutStartSec=3600
 
 [Install]

@@ -103,12 +103,14 @@ if [ "${MAKE_ISSUE}" -eq 1 ] && command -v gh >/dev/null 2>&1; then
   for extra in ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}; do
     if [ -n "${extra}" ]; then LABELS="${LABELS},${extra}"; fi
   done
-  gh issue create --repo "${TELEMETRY_REPO#https://github.com/}" \
+  SLUG="${TELEMETRY_REPO#https://github.com/}"
+  SLUG="${SLUG%.git}"
+  ISSUE_OUT="$(gh issue create --repo "${SLUG}" \
     --title "telemetry: ${NODE} ${RUN_ID} [${ALL_FLAGS// /,}]" \
     --body-file "${STAGED_RUN}/BRIEFING.md" \
-    --label "${LABELS}" 2>/dev/null \
-    && echo "[push] issue flagged with labels: ${LABELS}" \
-    || echo "[push] NOTE: issue creation skipped (labels may not exist yet — create them once in repo settings, or pass --no-issue)"
+    --label "${LABELS}" 2>&1)" \
+    && echo "[push] issue flagged with labels: ${LABELS} -> ${ISSUE_OUT}" \
+    || echo "[push] NOTE: issue creation failed: ${ISSUE_OUT} (ensure labels exist once in repo settings, or pass --no-issue)"
 fi
 if [ -x "${SCRIPT_DIR}/notify.sh" ]; then
   bash "${SCRIPT_DIR}/notify.sh" "nexo telemetry" "pushed ${NODE}/${RUN_ID} flags:[${ALL_FLAGS// /,}]" 3 "satellite" || true

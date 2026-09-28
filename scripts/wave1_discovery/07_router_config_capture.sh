@@ -23,7 +23,9 @@ capture_router() {
   local dir="${OUT_DIR}/routers/${name}"
   mkdir -p "${dir}"
   local rc=0
-  ssh "${SSH_OPTS[@]}" "${OPENWRT_SSH_USER}@${ip}" bash -s > "${dir}/facts.txt" 2> "${dir}/ssh.err" <<'REMOTE' || rc=$?
+  # NOTE: OpenWrt ships ash (busybox) — 'bash -s' does not exist there.
+  # The remote bundle is strictly POSIX so 'sh -s' works everywhere.
+  ssh "${SSH_OPTS[@]}" "${OPENWRT_SSH_USER}@${ip}" sh -s > "${dir}/facts.txt" 2> "${dir}/ssh.err" <<'REMOTE' || rc=$?
 echo "RELEASE=$(cat /etc/openwrt_release 2>/dev/null | grep DISTRIB_DESCRIPTION | cut -d"'" -f2)"
 echo "KERNEL=$(uname -r)"
 echo "UPTIME_S=$(cut -d. -f1 /proc/uptime)"

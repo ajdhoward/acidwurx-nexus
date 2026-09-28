@@ -319,7 +319,17 @@
       "evidence": "R-HISTORY-TOKENS",
       "created": "2026-09-26T23:28:35+00:00",
       "updated": "2026-09-26T23:28:35+00:00"
+    },
+    {
+      "id": "T-233",
+      "title": "[R-THERMAL-HIGH] Thermal ceiling exceeded (94.0C) \u2014 airflow/dust/paste check before sustained inference",
+      "target": "TanyaCheex",
+      "agent": null,
+      "state": "backlog",
+      "evidence": "R-THERMAL-HIGH",
+      "created": "2026-09-27T07:05:41+00:00",
+      "updated": "2026-09-27T07:05:41+00:00"
     }
   ],
-  "updated": "2026-09-26T23:28:35+00:00"
+  "updated": "2026-09-27T07:05:41+00:00"
 }

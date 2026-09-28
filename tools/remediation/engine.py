@@ -285,7 +285,7 @@ def write_executor(run_dir, routed):
         lines.append("%s" % fname)
     lines.append('echo "[remediate] done (APPLY=${APPLY})"')
     lines.append('if [ "${APPLY}" = "1" ] && [ -x "$REPO/scripts/wave2_deployment/notify.sh" ]; then')
-    lines.append('  bash "$REPO/scripts/wave2_deployment/notify.sh" "nexo remediate" "auto-safe actions executed on $(hostname)" 3 "wrench" || true')
+    lines.append('  bash "$REPO/scripts/wave2_deployment/notify.sh" "nexo remediate" "auto-safe actions executed on $(uname -n)" 3 "wrench" || true')
     lines.append('fi')
     path = os.path.join(run_dir, "remediate.sh")
     with open(path, "w") as fh:

@@ -68,6 +68,22 @@ try:
 except Exception:
     add("git_remotes_token_free", "warn", "git not queryable")
 
+# .git/config deep scan — `git push -u <token-url>` parks the token in
+# [branch "main"] remote=, which `git remote -v` never shows. Section names
+# only; values never leave this function.
+gitcfg = os.path.join(repo, ".git", "config")
+if os.path.exists(gitcfg):
+    tainted_sections = []
+    section = "?"
+    for line in open(gitcfg, errors="replace"):
+        stripped = line.strip()
+        if stripped.startswith("["):
+            section = stripped
+        if re.search(r"://[^/\s]+:[^@\s]+@", stripped) or re.search(r"\b(ghp_|gho_|github_pat_|cfut_|cfat_)[A-Za-z0-9_\-]{10,}", stripped):
+            tainted_sections.append(section)
+    add("git_config_token_free", "fail" if tainted_sections else "pass",
+        "sections with embedded credentials: %s" % ",".join(sorted(set(tainted_sections))) if tainted_sections else "")
+
 # gh plaintext store (existence check only)
 gh_hosts = os.path.expanduser("~/.config/gh/hosts.yml")
 add("gh_plaintext_store", "info" if os.path.exists(gh_hosts) else "pass",

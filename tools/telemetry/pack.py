@@ -186,6 +186,52 @@ def render_briefing(results, run_dir, flags):
             lines.append("- ollama models: %s | exposed: %s | fastmcp: %s | mcp configs: %d" % (
                 json.dumps([m.get("name") for m in data.get("ollama_models", []) if isinstance(m, dict)]),
                 data.get("ollama_bind_exposed"), data.get("fastmcp"), len(data.get("mcp_configs", []))))
+        elif name.startswith("06"):
+            nodes = data.get("nodes", [])
+            lines.append("- reachable: %s" % (", ".join(str(n.get("name")) for n in nodes) or "none"))
+            for n in nodes[:6]:
+                lines.append("  - %s: %s | cores %s | mem %sKB | failed_units %s | docker %s | podman %s | isolcpus %s | hugepages %s | thermal %sC" % (
+                    n.get("name"), n.get("os"), n.get("cores"), n.get("mem_total_kb"), n.get("failed_units"),
+                    n.get("docker_running"), n.get("podman_running"), n.get("isolcpus"), n.get("hugepages"), n.get("thermal_max_c")))
+            for u in data.get("nodes_unreachable", []):
+                lines.append("  - UNREACHABLE %s (%s) — %s" % (u.get("name"), u.get("ip"), u.get("route_hint", "")))
+        elif name.startswith("07"):
+            for r in data.get("routers", []):
+                lines.append("- router %s: reachable=%s release=%s leases=%s opt3_redirect=%s pxe=%s" % (
+                    r.get("name"), r.get("reachable"), r.get("release"), r.get("leases_count"),
+                    r.get("option3_redirect"), r.get("pxe_options_present")))
+            lines.append("- lease table (MACs masked in public briefing; full table in encrypted raw):")
+            for lease in data.get("leases", [])[:20]:
+                mac_parts = str(lease.get("mac", "")).split(":")
+                mac_masked = ":".join(mac_parts[:3] + ["XX"] * max(len(mac_parts) - 3, 0)) if len(mac_parts) >= 4 else lease.get("mac")
+                lines.append("  - %s %s %s" % (lease.get("ip"), mac_masked, lease.get("hostname")))
+        elif name.startswith("08"):
+            lines.append("- zones=%d records=%d access_apps=%d zt_devices=%d tunnels=%d dns_violations=%d" % (
+                len(data.get("zones_full", [])), data.get("records_total", 0), len(data.get("access_apps", [])),
+                len(data.get("zt_devices", [])), len(data.get("tunnels_full", [])), len(data.get("dns_violations", []))))
+            lines.append("- account_flags: %s" % json.dumps(data.get("account_flags", {}), sort_keys=True))
+        elif name.startswith("09"):
+            lines.append("- governance gaps (%d):" % data.get("governance_gaps_count", 0))
+            for gap in data.get("governance_gaps", [])[:10]:
+                lines.append("  - %s" % gap)
+        elif name.startswith("10"):
+            hot = [d for d in data.get("disks", []) if str(d.get("used", "")).rstrip("%").isdigit() and int(str(d.get("used")).rstrip("%")) >= 75]
+            lines.append("- disks>=75%%: %s" % json.dumps(hot))
+            lines.append("- noatime_missing=%d | nas=%s | restic=%s | smart=%s" % (
+                len(data.get("noatime_missing", [])), json.dumps(data.get("nas", {})),
+                json.dumps(data.get("restic", {})), json.dumps(data.get("smart", {}))))
+        elif name.startswith("11"):
+            lines.append("- open services (%d):" % len(data.get("matrix", [])))
+            for row in data.get("matrix", [])[:24]:
+                lines.append("  - %s:%s %s%s" % (row.get("host"), row.get("port"), row.get("service"),
+                                                 (" http=%s" % row.get("http_status")) if row.get("http_status") else ""))
+            for finding in data.get("findings", []):
+                lines.append("  - FINDING [%s] %s" % (finding.get("rule"), finding.get("detail")))
+        elif name.startswith("12"):
+            bad = [c for c in data.get("checks", []) if c.get("status") in ("fail", "todo", "warn")]
+            lines.append("- checks=%d flagged=%d:" % (data.get("checks_total", 0), len(bad)))
+            for c in bad[:14]:
+                lines.append("  - [%s] %s %s" % (c.get("status"), c.get("id"), (c.get("detail") or "")[:80]))
         lines.append("")
     return "\n".join(lines)
 
